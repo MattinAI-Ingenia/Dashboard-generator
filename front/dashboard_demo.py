@@ -9,27 +9,32 @@ import json
 import time
 from typing import Dict, List, Any
 import random
+import requests
+import asyncio
 
-# Modern UI components
-try:
-    import streamlit_shadcn_ui as ui
-    SHADCN_UI = True
-except ImportError:
-    SHADCN_UI = False
+# API Configuration
+API_BASE_URL = "http://localhost:8000/api/v1"  # Update with your actual API URL
 
-try:
-    from streamlit_extras.stylable_container import stylable_container
-    STYLABLE_CONTAINER = True
-except ImportError:
-    STYLABLE_CONTAINER = False
-
-try:
-    from streamlit_pills import pills
-    PILLS = True
-except ImportError:
-    PILLS = False
-
-ENHANCED_UI = SHADCN_UI or STYLABLE_CONTAINER or PILLS
+# API Helper functions
+def call_api(endpoint: str, method: str = "GET", data: dict = None):
+    """Make API calls to the backend"""
+    url = f"{API_BASE_URL}{endpoint}"
+    try:
+        if method == "GET":
+            response = requests.get(url)
+        elif method == "POST":
+            response = requests.post(url, json=data)
+        elif method == "DELETE":
+            response = requests.delete(url)
+        
+        if response.status_code < 400:
+            return response.json() if response.content else {}
+        else:
+            st.error(f"API Error: {response.status_code} - {response.text}")
+            return None
+    except Exception as e:
+        st.error(f"Connection Error: {str(e)}")
+        return None
 
 # Configure page
 st.set_page_config(
@@ -386,27 +391,11 @@ generator = get_dashboard_generator()
 # Utility functions
 def render_visualization(viz: Dict[str, Any], show_controls: bool = False):
     """Render a visualization with optional controls"""
-    container_class = "viz-container" if not STYLABLE_CONTAINER else ""
+    container_class = ""
     
-    if STYLABLE_CONTAINER:
-        with stylable_container(
-            key=f"viz_{viz['id']}",
-            css_styles="""
-            {
-                background: white;
-                border: 1px solid #e2e8f0;
-                border-radius: 12px;
-                padding: 1.5rem;
-                margin: 1rem 0;
-                box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
-            }
-            """,
-        ):
-            _render_viz_content(viz, show_controls)
-    else:
-        st.markdown(f'<div class="{container_class}">', unsafe_allow_html=True)
-        _render_viz_content(viz, show_controls)
-        st.markdown('</div>', unsafe_allow_html=True)
+    st.markdown(f'<div class="{container_class}">', unsafe_allow_html=True)
+    _render_viz_content(viz, show_controls)
+    st.markdown('</div>', unsafe_allow_html=True)
 
 def _render_viz_content(viz: Dict[str, Any], show_controls: bool = False):
     """Render visualization content"""
@@ -582,7 +571,7 @@ with st.sidebar:
     menu_items = [
         ("🚀 Generate Dashboard", "generate", "Create and edit dashboards"),
         ("📚 My Dashboards", "dashboards", "View saved dashboards"),
-        ("🔧 Settings", "settings", "System configuration"),
+        ("🔌 Data Sources", "data_sources", "Manage data connections"), 
         ("📤 Import/Export", "import_export", "Data management")
     ]
     
@@ -590,21 +579,13 @@ with st.sidebar:
     
     for label, key, description in menu_items:
         is_active = st.session_state.current_page == key
-        
-        if SHADCN_UI:
-            clicked = ui.button(
-                text=label,
-                key=f"nav_{key}",
-                variant="default" if is_active else "ghost",
-                size="sm"
-            )
-        else:
-            clicked = st.button(
-                label,
-                key=f"nav_{key}",
-                help=description,
-                type="primary" if is_active else "secondary"
-            )
+    
+        clicked = st.button(
+            label,
+            key=f"nav_{key}",
+            help=description,
+            type="primary" if is_active else "secondary"
+        )
         
         if clicked:
             st.session_state.current_page = key
@@ -706,18 +687,13 @@ if st.session_state.current_page == "generate":
             "Revenue trend over time",
             "Top 10 products by sales"
         ]
-        
-        if PILLS:
-            selected = pills("Quick suggestions", suggestions, key="viz_suggestions")
-            if selected:
-                st.session_state.viz_query = selected
-        else:
-            st.write("💡 **Quick suggestions:**")
-            cols = st.columns(len(suggestions))
-            for i, suggestion in enumerate(suggestions):
-                with cols[i]:
-                    if st.button(suggestion, key=f"suggestion_{i}"):
-                        st.session_state.viz_query = suggestion
+
+        st.write("💡 **Quick suggestions:**")
+        cols = st.columns(len(suggestions))
+        for i, suggestion in enumerate(suggestions):
+            with cols[i]:
+                if st.button(suggestion, key=f"suggestion_{i}"):
+                    st.session_state.viz_query = suggestion
         
         # Query input
         query = st.text_area(
@@ -833,109 +809,6 @@ elif st.session_state.current_page == "dashboards":
                 st.divider()
         else:
             st.info("No dashboards match your search criteria.")
-
-elif st.session_state.current_page == "settings":
-    st.title("🔧 System Settings")
-    
-    # Database schemas
-    st.subheader("🗄️ Available Data Sources")
-    
-    schemas = {
-        "flights_db": {
-            "description": "Commercial flights database",
-            "tables": {
-                "flights": ["flight_id", "airport", "airline", "delay_minutes", "date", "passengers"],
-                "airports": ["airport_code", "name", "city", "country"],
-                "airlines": ["airline_code", "name", "country"]
-            },
-            "status": "active"
-        },
-        "sales_db": {
-            "description": "Sales and revenue database", 
-            "tables": {
-                "sales": ["sale_id", "region", "product", "revenue", "quantity", "date"],
-                "products": ["product_id", "name", "category", "price"],
-                "customers": ["customer_id", "name", "region", "type"]
-            },
-            "status": "active"
-        }
-    }
-    
-    for schema_name, schema_info in schemas.items():
-        with st.expander(f"📊 {schema_name.replace('_', ' ').title()}", expanded=False):
-            col1, col2 = st.columns([2, 1])
-            
-            with col1:
-                st.write(f"**Description:** {schema_info['description']}")
-                st.write("**Available Tables:**")
-                
-                for table_name, columns in schema_info['tables'].items():
-                    st.write(f"• **{table_name}**: {', '.join(columns)}")
-            
-            with col2:
-                status_class = "status-active" if schema_info['status'] == 'active' else "status-offline"
-                st.markdown(f'<span class="status-badge {status_class}">🟢 Active</span>', unsafe_allow_html=True)
-    
-    st.divider()
-    
-    # Visualization types
-    st.subheader("📈 Available Visualization Types")
-    
-    viz_types = {
-        "bar_chart": {
-            "name": "Bar Chart",
-            "description": "Compare categorical values",
-            "use_cases": ["Regional comparisons", "Product sales", "Airport traffic"],
-            "icon": "📊"
-        },
-        "line_chart": {
-            "name": "Line Chart", 
-            "description": "Show trends over time",
-            "use_cases": ["Time series", "Performance trends", "Growth patterns"],
-            "icon": "📈"
-        },
-        "pie_chart": {
-            "name": "Pie Chart",
-            "description": "Show proportions and distributions", 
-            "use_cases": ["Market share", "Distribution breakdown", "Category proportions"],
-            "icon": "🥧"
-        }
-    }
-    
-    cols = st.columns(len(viz_types))
-    for i, (viz_id, viz_info) in enumerate(viz_types.items()):
-        with cols[i]:
-            st.markdown(f"""
-            <div class="dashboard-card" style="text-align: center;">
-                <div style="font-size: 2rem; margin-bottom: 1rem;">{viz_info['icon']}</div>
-                <h4 style="color: #64748b;">{viz_info['name']}</h4>
-                <p style="color: #64748b; margin-bottom: 1rem;">{viz_info['description']}</p>
-                <div style="font-size: 0.875rem; color: #64748b;">
-                    <strong>Use cases:</strong><br>
-                    {', '.join(viz_info['use_cases'])}
-                </div>
-            </div>
-            """, unsafe_allow_html=True)
-    
-    st.divider()
-    
-    # System metrics
-    st.subheader("📊 System Metrics")
-    
-    col1, col2, col3, col4 = st.columns(4)
-    
-    with col1:
-        st.metric("Total Dashboards", len(st.session_state.dashboards), delta="↗️")
-    
-    with col2:
-        total_viz = sum(len(d['visualizations']) for d in st.session_state.dashboards.values())
-        st.metric("Total Visualizations", total_viz, delta="↗️")
-    
-    with col3:
-        st.metric("Data Sources", len(schemas), delta="Stable")
-    
-    with col4:
-        st.metric("Viz Types", len(viz_types), delta="Stable")
 
 elif st.session_state.current_page == "import_export":
     st.title("📤 Import/Export")
@@ -1157,6 +1030,143 @@ elif st.session_state.current_page == "import_export":
                     st.info("Selected dashboard has no visualizations to export.")
         else:
             st.info("📋 No dashboards available. Create some dashboards first!")
+
+elif st.session_state.current_page == "data_sources":
+    st.title("🔌 Data Sources")
+    
+    # Tabs for different data source operations
+    tab1, tab2, tab3 = st.tabs(["📋 My Sources", "➕ Add Source", "🧪 Test Sources"])
+    
+    with tab1:
+        st.subheader("📋 Your Data Sources")
+        
+        # Fetch data sources from API
+        data_sources = call_api("/data-sources/")
+        
+        if data_sources:
+            for ds in data_sources:
+                with st.expander(f"📊 {ds['name']}", expanded=False):
+                    col1, col2, col3 = st.columns([2, 1, 1])
+                    
+                    with col1:
+                        st.write(f"**Type:** {ds['type']}")
+                        st.write(f"**Status:** {ds['status']}")
+                        if ds.get('description'):
+                            st.write(f"**Description:** {ds['description']}")
+                    
+                    with col2:
+                        if st.button("🔍 View Schema", key=f"schema_{ds['id']}"):
+                            schema = call_api(f"/data-sources/{ds['id']}/schema")
+                            if schema and schema.get('tables'):
+                                st.subheader("Database Schema")
+                                for table in schema['tables']:
+                                    st.write(f"**{table['name']}** ({table.get('row_count', 'Unknown')} rows)")
+                                    cols_text = ", ".join([col['name'] for col in table['columns']])
+                                    st.caption(f"Columns: {cols_text}")
+                    
+                    with col3:
+                        if st.button("🗑️ Delete", key=f"delete_{ds['id']}", type="secondary"):
+                            if call_api(f"/data-sources/{ds['id']}", method="DELETE") is not None:
+                                st.success("Data source deleted!")
+                                st.rerun()
+        else:
+            st.info("No data sources found. Add your first data source in the 'Add Source' tab.")
+    
+    with tab2:
+        st.subheader("➕ Add New Data Source")
+        
+        with st.form("add_data_source"):
+            # First row - basic info
+            st.write("**Basic Information**")
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                name = st.text_input("Name*", placeholder="My Database")
+                description = st.text_area("Description", placeholder="Optional description...")
+            
+            with col2:
+                db_type = st.selectbox("Database Type", ["postgresql", "mysql", "sqlite", "mongodb"])
+                # Show default port based on database type
+                default_ports = {
+                    "postgresql": 5432,
+                    "mysql": 3306,
+                    "sqlite": 0,
+                    "mongodb": 27017
+                }
+                port = st.number_input("Port", value=default_ports.get(db_type, 5432), min_value=0, max_value=65535)
+            
+            st.divider()
+            
+            # Second row - connection details
+            st.write("**Connection Details**")
+            col3, col4 = st.columns(2)
+            
+            with col3:
+                host = st.text_input("Host", value="localhost")
+                database = st.text_input("Database Name*", placeholder="mydb")
+            
+            with col4:
+                username = st.text_input("Username", placeholder="user")
+                password = st.text_input("Password", type="password", placeholder="password")
+            
+            st.divider()
+            
+            submitted = st.form_submit_button("🔗 Add Data Source", type="primary")
+            
+            if submitted and name and database:
+                # Prepare data source config
+                config = {
+                    "name": name,
+                    "description": description,
+                    "type": db_type,
+                    "connection": {
+                        "host": host,
+                        "port": port,
+                        "database": database,
+                        "username": username,
+                        "password": password,
+                        "schema": "public"
+                    }
+                }
+                
+                with st.spinner("Testing connection and adding data source..."):
+                    result = call_api("/data-sources/", method="POST", data=config)
+                    
+                if result:
+                    st.success(f"Data source '{name}' added successfully!")
+                    st.rerun()
+            elif submitted:
+                st.error("Please fill in required fields (Name and Database)")
+    
+    with tab3:
+        st.subheader("🧪 Test Connections")
+        
+        data_sources = call_api("/data-sources/")
+        
+        if data_sources:
+            for ds in data_sources:
+                col1, col2, col3 = st.columns([2, 1, 1])
+                
+                with col1:
+                    st.write(f"**{ds['name']}** ({ds['type']})")
+                    st.caption(f"Status: {ds['status']}")
+                
+                with col2:
+                    if st.button("🔍 Test", key=f"test_{ds['id']}"):
+                        with st.spinner("Testing connection..."):
+                            result = call_api(f"/data-sources/{ds['id']}/test-connection", method="POST")
+                            
+                        if result:
+                            if result.get('connection_successful'):
+                                st.success("Connection successful!")
+                            else:
+                                st.error(f"Connection failed: {result.get('message', 'Unknown error')}")
+                
+                with col3:
+                    status_color = "🟢" if ds['status'] == 'active' else "🔴"
+                    st.write(f"{status_color} {ds['status'].title()}")
+        else:
+            st.info("No data sources to test.")
 
 # Footer
 st.divider()
