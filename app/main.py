@@ -48,24 +48,16 @@ app.add_middleware(
 )
 
 # Include routers
-# app.include_router(
-#     dashboards.router,
-#     prefix=f"{settings.API_V1_STR}/dashboards",
-#     tags=["dashboards"]
-# )
+app.include_router(dashboards.router, prefix=f"{settings.API_V1_STR}/dashboards", tags=["dashboards"])
 
 app.include_router(data_sources.router, prefix=f"{settings.API_V1_STR}/data-sources", tags=["data-sources"])
+
+app.include_router(queries.router, prefix=f"{settings.API_V1_STR}/queries", tags=["queries"])
 
 # app.include_router(
 #     nlp.router,
 #     prefix=f"{settings.API_V1_STR}/nlp",
 #     tags=["nlp"]
-# )
-
-# app.include_router(
-#     queries.router,
-#     prefix=f"{settings.API_V1_STR}/queries",
-#     tags=["queries"]
 # )
 
 @app.get("/")
