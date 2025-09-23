@@ -1,16 +1,11 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
-import plotly.express as px
-import plotly.graph_objects as go
 from datetime import datetime, timedelta
 import uuid
 import json
 import time
 from typing import Dict, List, Any
-import random
-import requests
-import asyncio
 
 from utils.dashboard_api import DashboardApi
 
@@ -173,7 +168,7 @@ def init_session_state():
         st.session_state.dashboards = {}
 
         # Load saved dashboards from API on initialization
-        saved_dashboards = list_saved_dashboards()
+        saved_dashboards = dash_api.list_saved_dashboards()
         for dashboard in saved_dashboards:
             st.session_state.dashboards[str(dashboard["id"])] = dashboard
     if 'current_dashboard' not in st.session_state:
@@ -183,58 +178,10 @@ def init_session_state():
 
 init_session_state()
 
-# Mock NLP processor
-class MockNLPProcessor:
-    def __init__(self):
-        self.query_patterns = {
-            'flights': ['flight', 'airplane', 'airport', 'delay', 'aviation'],
-            'sales': ['sales', 'revenue', 'product', 'region', 'selling'],
-            'users': ['user', 'customer', 'client', 'subscriber'],
-            'time_series': ['over time', 'trend', 'evolution', 'monthly', 'daily'],
-            'comparison': ['compare', 'vs', 'versus', 'between'],
-            'top': ['top', 'best', 'highest', 'maximum'],
-            'pie': ['pie', 'distribution', 'breakdown', 'proportion'],
-            'bar': ['bar', 'column', 'compare'],
-            'line': ['line', 'trend', 'over time', 'evolution']
-        }
-    
-    def process_query(self, query: str) -> Dict[str, Any]:
-        query_lower = query.lower()
-        
-        data_source = 'flights'
-        if any(word in query_lower for word in self.query_patterns['sales']):
-            data_source = 'sales'
-        
-        viz_type = 'bar_chart'
-        if any(word in query_lower for word in self.query_patterns['pie']):
-            viz_type = 'pie_chart'
-        elif any(word in query_lower for word in self.query_patterns['line']):
-            viz_type = 'line_chart'
-        
-        if data_source == 'flights':
-            sql = "SELECT airport, COUNT(*) as delayed_flights FROM flights WHERE delay_minutes > 0 GROUP BY airport"
-            if 'airline' in query_lower:
-                sql = "SELECT airline, AVG(delay_minutes) as avg_delay FROM flights GROUP BY airline"
-        else:
-            sql = "SELECT region, SUM(revenue) as total_revenue FROM sales GROUP BY region"
-            if 'product' in query_lower:
-                sql = "SELECT product, SUM(revenue) as total_revenue FROM sales GROUP BY product"
-        
-        return {
-            'data_source': data_source,
-            'visualization_type': viz_type,
-            'generated_sql': sql,
-            'confidence': random.uniform(0.8, 0.95),
-            'suggestions': [
-                "Try being more specific with date ranges",
-                "Consider adding filters for better insights"
-            ]
-        }
-
 # Dashboard generator
 class DashboardGenerator:
     def __init__(self):
-        self.nlp = MockNLPProcessor()
+        pass
     
     def generate_visualization_simple(self, query: str, viz_id: str = None) -> Dict[str, Any]:
         """Generate fake visualization metadata - NO real query execution here"""
@@ -439,7 +386,7 @@ def execute_visualization_query(viz_config: Dict[str, Any]) -> Dict[str, Any]:
     """Execute the query for a visualization and return it with data for rendering"""
     try:
         # Execute the query using your API
-        query_result = execute_query(
+        query_result = dash_api.execute_query(
             data_source=viz_config["data_source"],
             query=viz_config["query"]["statement"]
         )
@@ -538,7 +485,7 @@ def render_dashboard_summary_with_load(dashboard: Dict[str, Any]):
                 with st.spinner("Loading with live data..."):
                     if dashboard.get('is_saved'):
                         # Load from API then execute queries
-                        fresh_dashboard = load_dashboard_from_api(dashboard['id'])
+                        fresh_dashboard = dash_api.load_dashboard_from_api(dashboard['id'])
                         if fresh_dashboard:
                             dashboard_with_data = load_dashboard_with_data(fresh_dashboard)
                             st.session_state.current_dashboard = dashboard_with_data
@@ -636,7 +583,7 @@ with st.sidebar:
                     result = dash_api.save_dashboard_to_api(dashboard)
                     if result:
                         # Refresh dashboards from API after saving
-                        saved_dashboards = list_saved_dashboards()
+                        saved_dashboards = dash_api.list_saved_dashboards()
                         
                         # Update session state with fresh data
                         for fresh_dashboard in saved_dashboards:
@@ -800,7 +747,7 @@ elif st.session_state.current_page == "dashboards":
     # Refresh dashboards from API
     if st.button("🔄 Refresh from Database"):
         with st.spinner("Loading dashboards from database..."):
-            saved_dashboards = list_saved_dashboards()
+            saved_dashboards = dash_api.list_saved_dashboards()
             
             # Clear all saved dashboards and reload
             st.session_state.dashboards = {
@@ -1101,7 +1048,7 @@ elif st.session_state.current_page == "data_sources":
         st.subheader("📋 Your Data Sources")
         
         # Fetch data sources from API
-        data_sources = call_api("/data-sources/")
+        data_sources = dash_api.call_api("/data-sources/")
         
         if data_sources:
             for ds in data_sources:
@@ -1116,7 +1063,7 @@ elif st.session_state.current_page == "data_sources":
                     
                     with col2:
                         if st.button("🔍 View Schema", key=f"schema_{ds['id']}"):
-                            schema = call_api(f"/data-sources/{ds['id']}/schema")
+                            schema = dash_api.call_api(f"/data-sources/{ds['id']}/schema")
                             if schema and schema.get('tables'):
                                 st.subheader("Database Schema")
                                 for table in schema['tables']:
@@ -1126,7 +1073,7 @@ elif st.session_state.current_page == "data_sources":
                     
                     with col3:
                         if st.button("🗑️ Delete", key=f"delete_{ds['id']}", type="secondary"):
-                            if call_api(f"/data-sources/{ds['id']}", method="DELETE") is not None:
+                            if dash_api.call_api(f"/data-sources/{ds['id']}", method="DELETE") is not None:
                                 st.success("Data source deleted!")
                                 st.rerun()
         else:
@@ -1190,7 +1137,7 @@ elif st.session_state.current_page == "data_sources":
                 }
                 
                 with st.spinner("Testing connection and adding data source..."):
-                    result = call_api("/data-sources/", method="POST", data=config)
+                    result = dash_api.call_api("/data-sources/", method="POST", data=config)
                     
                 if result:
                     st.success(f"Data source '{name}' added successfully!")
@@ -1201,7 +1148,7 @@ elif st.session_state.current_page == "data_sources":
     with tab3:
         st.subheader("🧪 Test Connections")
         
-        data_sources = call_api("/data-sources/")
+        data_sources = dash_api.call_api("/data-sources/")
         
         if data_sources:
             for ds in data_sources:
@@ -1214,7 +1161,7 @@ elif st.session_state.current_page == "data_sources":
                 with col2:
                     if st.button("🔍 Test", key=f"test_{ds['id']}"):
                         with st.spinner("Testing connection..."):
-                            result = call_api(f"/data-sources/{ds['id']}/test-connection", method="POST")
+                            result = dash_api.call_api(f"/data-sources/{ds['id']}/test-connection", method="POST")
                             
                         if result:
                             if result.get('connection_successful'):
