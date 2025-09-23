@@ -15,6 +15,8 @@ import asyncio
 # API Configuration
 API_BASE_URL = "http://localhost:8000/api/v1"  # Update with your actual API URL
 
+################## API ##################
+
 # API Helper functions
 def call_api(endpoint: str, method: str = "GET", data: dict = None):
     """Make API calls to the backend"""
@@ -35,6 +37,166 @@ def call_api(endpoint: str, method: str = "GET", data: dict = None):
     except Exception as e:
         st.error(f"Connection Error: {str(e)}")
         return None
+
+# Dashboard Api
+def save_dashboard_to_api(dashboard: Dict[str, Any]) -> Dict[str, Any]:
+    """Save dashboard to backend API"""
+    # Convert datetime objects to ISO strings in metadata
+    metadata = dashboard.get("metadata", {})
+    
+    if "created_at" in metadata and hasattr(metadata["created_at"], "isoformat"):
+        metadata["created_at"] = metadata["created_at"].isoformat()
+    if "last_modified" in metadata and hasattr(metadata["last_modified"], "isoformat"):
+        metadata["last_modified"] = metadata["last_modified"].isoformat()
+    
+    # Convert visualizations to API format
+    api_visualizations = []
+    for viz in dashboard.get("visualizations", []):
+        # Remove pandas DataFrame and other frontend-specific fields
+        api_viz = {
+            "id": viz["id"],
+            "title": viz["title"],
+            "description": viz.get("description", ""),
+            "chart_type": viz.get("chart_type", viz.get("type", "bar_chart")),
+            "data_source": viz.get("data_source", "default"),
+            "query": viz.get("query", {
+                "type": "sql",
+                "statement": viz.get("generated_sql", "SELECT 1"),
+                "parameters": {}
+            }),
+            "original_query": viz.get("original_query", viz.get("description", "")),
+            "config": viz.get("config", {}),
+            "created_at": viz.get("created_at", datetime.now().isoformat() + "Z")
+        }
+        api_visualizations.append(api_viz)
+    
+    # Format according to your API specification
+    dashboard_data = {
+        "name": dashboard["name"],
+        "description": dashboard.get("description", ""),
+        "visualizations": api_visualizations,
+        "layout": {
+            "type": "grid",
+            "grid_config": {
+                "columns": 3,
+                "gap": 16
+            },
+            "visualization_positions": {}
+        }
+    }
+
+    # If dashboard has an ID, it's an update
+    if dashboard.get("id") and dashboard.get("is_saved"):
+        dashboard_data["id"] = dashboard["id"]
+    
+    try:
+        result = call_api("/dashboards/save", method="POST", data=dashboard_data)
+        if result:
+            # Update the dashboard with the returned data
+            dashboard["id"] = result.get("id")
+            dashboard["is_saved"] = True
+            dashboard["metadata"]["last_modified"] = datetime.now()
+            
+            # Store in session state
+            st.session_state.dashboards[str(dashboard["id"])] = dashboard
+            
+            # Refresh dashboard list to get accurate counts
+            saved_dashboards = list_saved_dashboards()
+            for fresh_dashboard in saved_dashboards:
+                st.session_state.dashboards[str(fresh_dashboard["id"])] = fresh_dashboard
+            
+            return result
+        return None
+    except Exception as e:
+        st.error(f"Failed to save dashboard: {str(e)}")
+        return None
+    
+def load_dashboard_from_api(dashboard_id: int) -> Dict[str, Any]:
+    """Load dashboard from backend API"""
+    try:
+        result = call_api(f"/dashboards/{dashboard_id}")
+        if result:
+            # Convert API response back to frontend format
+            dashboard = {
+                "id": result["id"],
+                "name": result["dashboard_data"]["name"],
+                "description": result["dashboard_data"].get("description", ""),
+                "visualizations": result["dashboard_data"].get("visualizations", []),
+                "layout": result["dashboard_data"].get("layout", {"type": "grid", "responsive": True}),
+                "metadata": {
+                    "created_at": datetime.fromisoformat(result["created_at"].replace("Z", "+00:00")),
+                    "last_modified": datetime.fromisoformat(result["updated_at"].replace("Z", "+00:00")),
+                    "queries": result["dashboard_data"].get("metadata", {}).get("queries", []),
+                    "version": result["dashboard_data"].get("metadata", {}).get("version", 1)
+                },
+                "is_saved": True
+            }
+            return dashboard
+        return None
+    except Exception as e:
+        st.error(f"Failed to load dashboard: {str(e)}")
+        return None
+
+def list_saved_dashboards() -> List[Dict[str, Any]]:
+    """Get list of saved dashboards from API"""
+    try:
+        result = call_api("/dashboards/")
+        print()
+        print(f"Resultado de call_api, {result}")
+        print()
+        if result and result.get("dashboards"):
+            dashboards = []
+            for dash_data in result["dashboards"]:
+                dashboard = {
+                    "id": dash_data["id"],
+                    "name": dash_data["name"],
+                    "description": dash_data.get("description", ""),
+                    "visualizations": [],  # List endpoint doesn't include full visualization data
+                    "layout": {"type": "grid", "responsive": True},
+                    "metadata": {
+                        "created_at": datetime.fromisoformat(dash_data["created_at"].replace("Z", "+00:00")),
+                        "last_modified": datetime.fromisoformat(dash_data["updated_at"].replace("Z", "+00:00")),
+                        "queries": [],
+                        "version": 1,
+                        "visualization_count": dash_data.get("visualization_count", 0)
+                    },
+                    "is_saved": True
+                }
+                dashboards.append(dashboard)
+            return dashboards
+        return []
+    except Exception as e:
+        st.error(f"Failed to load dashboards: {str(e)}")
+        return []
+
+def delete_dashboard_from_api(dashboard_id: int) -> bool:
+    """Delete dashboard from backend API"""
+    try:
+        result = call_api(f"/dashboards/{dashboard_id}", method="DELETE")
+        return result is not None
+    except Exception as e:
+        st.error(f"Failed to delete dashboard: {str(e)}")
+        return False
+
+# Query Api
+def execute_query(data_source: str, query: str) -> Dict[str, Any]:
+    """Execute query via backend API"""
+    request_payload = {
+        "data_source": data_source,
+        "query": {
+            "type": "sql",
+            "statement": query,
+            "parameters": {}
+        }
+    }
+    try:
+        result = call_api("/queries/execute", method="POST", data=request_payload)
+        return result
+    except Exception as e:
+        st.error(f"Failed to execute query: {str(e)}")
+        return {}
+
+####################################################
 
 # Configure page
 st.set_page_config(
@@ -191,49 +353,17 @@ st.markdown("""
 def init_session_state():
     if 'dashboards' not in st.session_state:
         st.session_state.dashboards = {}
+
+        # Load saved dashboards from API on initialization
+        saved_dashboards = list_saved_dashboards()
+        for dashboard in saved_dashboards:
+            st.session_state.dashboards[str(dashboard["id"])] = dashboard
     if 'current_dashboard' not in st.session_state:
         st.session_state.current_dashboard = None
     if 'current_page' not in st.session_state:
         st.session_state.current_page = "generate"
 
 init_session_state()
-
-# Fake data generators
-def generate_fake_flight_data():
-    airports = ['JFK', 'LAX', 'ORD', 'DFW', 'ATL', 'SFO', 'LAS', 'SEA', 'MIA', 'BOS']
-    airlines = ['American', 'Delta', 'United', 'Southwest', 'JetBlue']
-    
-    data = []
-    for i in range(500):
-        data.append({
-            'flight_id': f'FL{random.randint(1000, 9999)}',
-            'airport': random.choice(airports),
-            'airline': random.choice(airlines),
-            'delay_minutes': random.randint(0, 180) if random.random() > 0.3 else 0,
-            'date': (datetime.now() - timedelta(days=random.randint(0, 30))).strftime('%Y-%m-%d'),
-            'passengers': random.randint(50, 300),
-            'flight_type': random.choice(['Domestic', 'International']),
-            'weather_delay': random.choice([True, False]) if random.random() > 0.7 else False
-        })
-    return pd.DataFrame(data)
-
-def generate_fake_sales_data():
-    regions = ['North', 'South', 'East', 'West', 'Central']
-    products = ['Product A', 'Product B', 'Product C', 'Product D', 'Product E']
-    
-    data = []
-    for i in range(300):
-        data.append({
-            'sale_id': f'S{random.randint(10000, 99999)}',
-            'region': random.choice(regions),
-            'product': random.choice(products),
-            'revenue': random.randint(1000, 50000),
-            'quantity': random.randint(1, 100),
-            'date': (datetime.now() - timedelta(days=random.randint(0, 90))).strftime('%Y-%m-%d'),
-            'salesperson': f'Sales Rep {random.randint(1, 20)}',
-            'customer_type': random.choice(['Enterprise', 'SMB', 'Individual'])
-        })
-    return pd.DataFrame(data)
 
 # Mock NLP processor
 class MockNLPProcessor:
@@ -287,77 +417,31 @@ class MockNLPProcessor:
 class DashboardGenerator:
     def __init__(self):
         self.nlp = MockNLPProcessor()
-        self.flight_data = generate_fake_flight_data()
-        self.sales_data = generate_fake_sales_data()
     
-    def generate_visualization(self, query: str, viz_id: str = None) -> Dict[str, Any]:
+    def generate_visualization_simple(self, query: str, viz_id: str = None) -> Dict[str, Any]:
+        """Generate fake visualization metadata - NO real query execution here"""
         if viz_id is None:
             viz_id = str(uuid.uuid4())
         
-        interpretation = self.nlp.process_query(query)
-        
-        if interpretation['data_source'] == 'flights':
-            df = self.flight_data
-        else:
-            df = self.sales_data
-        
-        if interpretation['visualization_type'] == 'bar_chart':
-            if interpretation['data_source'] == 'flights':
-                if 'airline' in query.lower():
-                    chart_data = df.groupby('airline')['delay_minutes'].mean().reset_index()
-                    title = "Average Delay by Airline"
-                    x_col, y_col = 'airline', 'delay_minutes'
-                else:
-                    delayed_flights = df[df['delay_minutes'] > 0]
-                    chart_data = delayed_flights.groupby('airport').size().reset_index(name='delayed_flights')
-                    title = "Delayed Flights by Airport"
-                    x_col, y_col = 'airport', 'delayed_flights'
-            else:
-                if 'product' in query.lower():
-                    chart_data = df.groupby('product')['revenue'].sum().reset_index()
-                    title = "Revenue by Product"
-                    x_col, y_col = 'product', 'revenue'
-                else:
-                    chart_data = df.groupby('region')['revenue'].sum().reset_index()
-                    title = "Revenue by Region"
-                    x_col, y_col = 'region', 'revenue'
-        
-        elif interpretation['visualization_type'] == 'pie_chart':
-            if interpretation['data_source'] == 'flights':
-                chart_data = df.groupby('airline').size().reset_index(name='flights')
-                title = "Flight Distribution by Airline"
-                x_col, y_col = 'airline', 'flights'
-            else:
-                chart_data = df.groupby('region')['revenue'].sum().reset_index()
-                title = "Revenue Distribution by Region"
-                x_col, y_col = 'region', 'revenue'
-        
-        else:  # line_chart
-            if interpretation['data_source'] == 'flights':
-                df['date'] = pd.to_datetime(df['date'])
-                chart_data = df.groupby('date')['delay_minutes'].mean().reset_index()
-                title = "Average Delay Trend Over Time"
-                x_col, y_col = 'date', 'delay_minutes'
-            else:
-                df['date'] = pd.to_datetime(df['date'])
-                chart_data = df.groupby('date')['revenue'].sum().reset_index()
-                title = "Revenue Trend Over Time"
-                x_col, y_col = 'date', 'revenue'
-        
+        # Return fake visualization with proper structure for saving to database
         return {
-            'id': viz_id,
-            'type': interpretation['visualization_type'],
-            'title': title,
-            'description': f"Generated from query: {query}",
-            'data': chart_data,
-            'x_column': x_col,
-            'y_column': y_col,
-            'generated_sql': interpretation['generated_sql'],
-            'config': {
-                'color_scheme': 'viridis',
-                'show_legend': True,
-                'height': 400
-            }
+            "id": viz_id,
+            "title": "Sales Revenue by Region",
+            "description": "Quarterly sales breakdown by geographic region", 
+            "chart_type": "bar_chart",
+            "data_source": "Langflow",  
+            "query": {
+                "type": "sql",
+                "statement": "SELECT COUNT(user_id), created_at FROM dashboard d GROUP BY created_at;",
+                "parameters": {}
+            },
+            "original_query": query,
+            "config": {
+                "x_column": "created_at",
+                "y_column": "count", 
+                "show_legend": True
+            },
+            "created_at": datetime.now().isoformat() + "Z"
         }
     
     def create_dashboard(self, name: str, description: str = "") -> Dict[str, Any]:
@@ -394,18 +478,39 @@ def render_visualization(viz: Dict[str, Any], show_controls: bool = False):
     container_class = ""
     
     st.markdown(f'<div class="{container_class}">', unsafe_allow_html=True)
-    _render_viz_content(viz, show_controls)
+    
+    # Handle error visualizations
+    if viz.get('type') == 'error':
+        st.error(f"❌ {viz['title']}: {viz['description']}")
+        if show_controls:
+            with st.expander("📝 Failed Query", expanded=False):
+                st.code(viz['generated_sql'], language='sql')
+        st.markdown('</div>', unsafe_allow_html=True)
+        return None
+    
+    # Check if data is available
+    print()
+    print(f"New Viz, {viz}")
+    print()
+    if viz.get('data') is None or viz['data'].empty:
+        st.warning("⚠️ No data available for this visualization")
+        st.markdown('</div>', unsafe_allow_html=True)
+        return None
+    
+    # Render normal visualization
+    result = _render_viz_content(viz, show_controls)
     st.markdown('</div>', unsafe_allow_html=True)
+    return result
 
 def _render_viz_content(viz: Dict[str, Any], show_controls: bool = False):
     """Render visualization content"""
     # Compact header
     col1, col2 = st.columns([4, 1])
-    
+
     with col1:
-        st.markdown(f'<p style="color: #000000; font-weight: bold; margin-bottom: 0.5rem;">📊 {viz["title"]}</p>', unsafe_allow_html=True)
+        st.markdown(f'<p style="color: #FFFFFF; font-weight: bold; margin-bottom: 0.5rem;">📊 {viz["title"]}</p>', unsafe_allow_html=True)
         if show_controls:
-            st.caption(viz['description'])
+            st.caption(viz.get('description', ''))
     
     with col2:
         if show_controls:
@@ -512,8 +617,81 @@ def _render_viz_content(viz: Dict[str, Any], show_controls: bool = False):
     
     return None
 
-def render_dashboard_summary(dashboard: Dict[str, Any]):
-    """Render dashboard summary card"""
+def execute_visualization_query(viz_config: Dict[str, Any]) -> Dict[str, Any]:
+    """Execute the query for a visualization and return it with data for rendering"""
+    try:
+        # Execute the query using your API
+        query_result = execute_query(
+            data_source=viz_config["data_source"],
+            query=viz_config["query"]["statement"]
+        )
+        
+        if not query_result or not query_result.get("data"):
+            raise Exception("No data returned from query")
+        
+        # Convert to DataFrame
+        df = pd.DataFrame(query_result["data"])
+        
+        # Auto-detect best columns for the chart type
+        numeric_cols = df.select_dtypes(include=['number']).columns.tolist()
+        categorical_cols = df.select_dtypes(include=['object', 'category']).columns.tolist()
+        
+        # Use config columns if they exist in the data, otherwise auto-detect
+        x_column = viz_config["config"].get("x_column")
+        y_column = viz_config["config"].get("y_column")
+        
+        if x_column not in df.columns or y_column not in df.columns:
+            # Fallback to auto-detection
+            if len(categorical_cols) >= 1 and len(numeric_cols) >= 1:
+                x_column = categorical_cols[0]
+                y_column = numeric_cols[0]
+            else:
+                x_column = df.columns[0] if len(df.columns) > 0 else 'x'
+                y_column = df.columns[1] if len(df.columns) > 1 else 'y'
+        
+        # Return visualization with data for rendering
+        return {
+            **viz_config,  # Keep all original config
+            "data": df,    # Add actual data for rendering
+            "x_column": x_column,
+            "y_column": y_column,
+            "type": viz_config["chart_type"],  # Map chart_type to type for render function
+            "generated_sql": viz_config["query"]["statement"],  # For SQL display
+            "execution_info": {
+                "row_count": query_result.get("row_count", len(df)),
+                "execution_time_ms": query_result.get("execution_time_ms", 0)
+            }
+        }
+        
+    except Exception as e:
+        # Return error visualization
+        return {
+            **viz_config,
+            "type": "error",
+            "data": pd.DataFrame(),
+            "error": str(e),
+            "generated_sql": viz_config["query"]["statement"]
+        }
+
+# NEW: Function to load dashboard and execute all visualization queries
+def load_dashboard_with_data(dashboard: Dict[str, Any]) -> Dict[str, Any]:
+    """Load dashboard and execute all visualization queries to get live data"""
+    dashboard_with_data = dashboard.copy()
+    
+    # Execute each visualization query
+    visualizations_with_data = []
+    
+    for viz_config in dashboard["visualizations"]:
+        with st.spinner(f"Loading {viz_config['title']}..."):
+            viz_with_data = execute_visualization_query(viz_config)
+            visualizations_with_data.append(viz_with_data)
+    
+    dashboard_with_data["visualizations"] = visualizations_with_data
+    return dashboard_with_data
+
+# Update your render_dashboard_summary_with_load function
+def render_dashboard_summary_with_load(dashboard: Dict[str, Any]):
+    """Render dashboard summary card with load from API capability"""
     with st.container():
         col1, col2, col3, col4 = st.columns([3, 1, 1, 1])
         
@@ -522,30 +700,53 @@ def render_dashboard_summary(dashboard: Dict[str, Any]):
             st.caption(dashboard['description'] if dashboard['description'] else "No description")
             
             # Status badge
-            status = "saved" if dashboard['is_saved'] else "draft"
-            status_class = "status-active" if dashboard['is_saved'] else "status-temporary"
-            status_text = "Saved" if dashboard['is_saved'] else "Draft"
+            status = "saved" if dashboard.get('is_saved') else "draft"
+            status_class = "status-active" if dashboard.get('is_saved') else "status-temporary"
+            status_text = "Saved" if dashboard.get('is_saved') else "Local Draft"
             
             st.markdown(f"""
             <span class="status-badge {status_class}">
-                {'💾' if dashboard['is_saved'] else '📝'} {status_text}
+                {'💾' if dashboard.get('is_saved') else '📝'} {status_text}
             </span>
             """, unsafe_allow_html=True)
-            
+            print()
+            print(f"dashboard data, {dashboard}")
+            print()
             st.caption(f"📅 Modified: {dashboard['metadata']['last_modified'].strftime('%Y-%m-%d %H:%M')}")
-            st.caption(f"📊 {len(dashboard['visualizations'])} visualizations")
+            st.caption(f"📊 {dashboard['metadata']['visualization_count']} visualizations")
         
         with col2:
-            if st.button("👁️ View", key=f"view_{dashboard['id']}"):
-                st.session_state.current_dashboard = dashboard
-                st.session_state.current_page = "generate"
-                st.rerun()
+            if st.button("👁️ View", key=f"view_{dashboard.get('id', 'temp')}"):
+                with st.spinner("Loading with live data..."):
+                    if dashboard.get('is_saved'):
+                        # Load from API then execute queries
+                        fresh_dashboard = load_dashboard_from_api(dashboard['id'])
+                        if fresh_dashboard:
+                            dashboard_with_data = load_dashboard_with_data(fresh_dashboard)
+                            st.session_state.current_dashboard = dashboard_with_data
+                    else:
+                        # Local dashboard - just execute queries
+                        dashboard_with_data = load_dashboard_with_data(dashboard)
+                        st.session_state.current_dashboard = dashboard_with_data
+                    
+                    st.session_state.current_page = "generate"
+                    st.rerun()
         
         with col3:
-            if st.button("📤 Export", key=f"export_{dashboard['id']}"):
+            if st.button("📤 Export", key=f"export_{dashboard.get('id', 'temp')}"):
+                # Export without the data field (just the configuration)
+                export_dashboard = dashboard.copy()
+                export_visualizations = []
+                
+                for viz in export_dashboard.get("visualizations", []):
+                    export_viz = {k: v for k, v in viz.items() if k != "data"}
+                    export_visualizations.append(export_viz)
+                
+                export_dashboard["visualizations"] = export_visualizations
+                
                 export_data = {
                     "version": "1.0",
-                    "dashboard": dashboard,
+                    "dashboard": export_dashboard,
                     "exported_at": datetime.now().isoformat()
                 }
                 st.download_button(
@@ -553,16 +754,26 @@ def render_dashboard_summary(dashboard: Dict[str, Any]):
                     data=json.dumps(export_data, indent=2, default=str),
                     file_name=f"{dashboard['name']}.json",
                     mime="application/json",
-                    key=f"download_{dashboard['id']}"
+                    key=f"download_{dashboard.get('id', 'temp')}"
                 )
         
         with col4:
-            if st.button("🗑️ Delete", key=f"delete_{dashboard['id']}", type="secondary"):
-                if dashboard['id'] in st.session_state.dashboards:
-                    del st.session_state.dashboards[dashboard['id']]
-                    if st.session_state.current_dashboard and st.session_state.current_dashboard['id'] == dashboard['id']:
+            if st.button("🗑️ Delete", key=f"delete_{dashboard.get('id', 'temp')}", type="secondary"):
+                dashboard_id = dashboard.get('id')
+                
+                # Delete from API if it's saved
+                if dashboard.get('is_saved') and dashboard_id:
+                    with st.spinner("Deleting from database..."):
+                        if delete_dashboard_from_api(dashboard_id):
+                            st.success("✅ Dashboard deleted from database")
+                        else:
+                            st.error("❌ Failed to delete from database")
+                
+                # Remove from session state
+                if str(dashboard_id) in st.session_state.dashboards:
+                    del st.session_state.dashboards[str(dashboard_id)]
+                    if st.session_state.current_dashboard and st.session_state.current_dashboard.get('id') == dashboard_id:
                         st.session_state.current_dashboard = None
-                    st.success(f"✅ Dashboard '{dashboard['name']}' deleted")
                     st.rerun()
 
 # Sidebar with enhanced navigation
@@ -602,12 +813,21 @@ with st.sidebar:
         
         col1, col2 = st.columns(2)
         with col1:
-            if st.button("💾 Save", key="sidebar_save", disabled=dashboard['is_saved']):
-                dashboard['is_saved'] = True
-                dashboard['metadata']['last_modified'] = datetime.now()
-                st.session_state.dashboards[dashboard['id']] = dashboard
-                st.success("✅ Dashboard saved!")
-                st.rerun()
+            if st.button("💾 Save", key="sidebar_save"):
+                with st.spinner("Saving dashboard..."):
+                    result = save_dashboard_to_api(dashboard)
+                    if result:
+                        # Refresh dashboards from API after saving
+                        saved_dashboards = list_saved_dashboards()
+                        
+                        # Update session state with fresh data
+                        for fresh_dashboard in saved_dashboards:
+                            st.session_state.dashboards[str(fresh_dashboard["id"])] = fresh_dashboard
+                        
+                        st.success("✅ Dashboard saved to database!")
+                        st.rerun()
+                    else:
+                        st.error("❌ Failed to save dashboard")
         
         with col2:
             if st.button("🗑️ Clear", key="sidebar_clear"):
@@ -617,15 +837,6 @@ with st.sidebar:
         st.info("No dashboard selected")
     
     st.divider()
-    
-    # Quick stats
-    st.subheader("📈 Quick Stats")
-    col1, col2 = st.columns(2)
-    with col1:
-        st.metric("Saved", len(st.session_state.dashboards))
-    with col2:
-        current = "Yes" if st.session_state.current_dashboard else "No"
-        st.metric("Current", current)
 
 # Main content area
 if st.session_state.current_page == "generate":
@@ -651,8 +862,9 @@ if st.session_state.current_page == "generate":
             
             if st.button("🚀 Create Dashboard", type="primary", disabled=not new_name):
                 dashboard = generator.create_dashboard(new_name, new_desc)
+                dashboard['is_saved'] = False  # Mark as not saved to database
                 st.session_state.current_dashboard = dashboard
-                st.success(f"✅ Dashboard '{new_name}' created!")
+                st.success(f"Dashboard '{new_name}' created locally! Click 'Save' to persist to database.")
                 st.rerun()
     
     else:
@@ -708,40 +920,50 @@ if st.session_state.current_page == "generate":
         
         with col1:
             if st.button("➕ Add Visualization", type="primary", disabled=not query):
-                with st.spinner("🤖 Generating visualization..."):
+                with st.spinner("🤖 Generating visualization config..."):
                     progress = st.progress(0)
+                    
+                    # Just create the fake config (no query execution)
                     for i in range(100):
                         time.sleep(0.01)
                         progress.progress(i + 1)
                     
-                    viz = generator.generate_visualization(query)
-                    dashboard['visualizations'].append(viz)
+                    # Generate fake visualization config
+                    viz_config = generator.generate_visualization_simple(query)
+                    viz_with_data = execute_visualization_query(viz_config)
+                    dashboard['visualizations'].append(viz_with_data)
                     dashboard['metadata']['queries'].append(query)
                     dashboard['metadata']['last_modified'] = datetime.now()
                     
                     progress.empty()
-                    st.success("✅ Visualization added!")
+                    st.success("✅ Visualization added to dashboard!")
                     st.session_state.viz_query = ""
                     st.rerun()
-        
+            
         st.divider()
         
         # Display visualizations in grid
         if dashboard['visualizations']:
             st.subheader(f"📊 Current Visualizations ({len(dashboard['visualizations'])})")
             
+            # Check if visualizations have data, if not execute queries
+            visualizations_to_display = dashboard['visualizations']
+            if dashboard['visualizations'] and dashboard['visualizations'][0].get('data') is None:
+                with st.spinner("Loading live data..."):
+                    visualizations_to_display = []
+                    for viz_config in dashboard['visualizations']:
+                        viz_with_data = execute_visualization_query(viz_config)
+                        visualizations_to_display.append(viz_with_data)
+
             # Grid layout - 3 visualizations per row
-            visualizations = dashboard['visualizations']
-            
-            for i in range(0, len(visualizations), 3):
+            for i in range(0, len(visualizations_to_display), 3):
                 cols = st.columns(3)
                 
-                for j, viz in enumerate(visualizations[i:i+3]):
+                for j, viz in enumerate(visualizations_to_display[i:i+3]):
                     with cols[j]:
                         action = render_visualization(viz, show_controls=True)
                         
                         if action == "remove":
-                            # Find and remove the visualization
                             viz_index = next((idx for idx, v in enumerate(dashboard['visualizations']) if v['id'] == viz['id']), None)
                             if viz_index is not None:
                                 dashboard['visualizations'].pop(viz_index)
@@ -750,11 +972,30 @@ if st.session_state.current_page == "generate":
                                 st.rerun()
                         elif action == "edit":
                             st.info("✏️ Editing functionality coming soon!")
+
         else:
             st.info("🎯 No visualizations yet. Add your first visualization using the form above!")
 
 elif st.session_state.current_page == "dashboards":
     st.title("📚 My Dashboards")
+    
+    # Refresh dashboards from API
+    if st.button("🔄 Refresh from Database"):
+        with st.spinner("Loading dashboards from database..."):
+            saved_dashboards = list_saved_dashboards()
+            
+            # Clear all saved dashboards and reload
+            st.session_state.dashboards = {
+                k: v for k, v in st.session_state.dashboards.items() 
+                if not v.get('is_saved')  # Keep only local drafts
+            }
+            
+            # Add refreshed dashboards
+            for dashboard in saved_dashboards:
+                st.session_state.dashboards[str(dashboard["id"])] = dashboard
+            
+            st.success(f"Loaded {len(saved_dashboards)} dashboards from database")
+            st.rerun()
     
     if not st.session_state.dashboards:
         st.markdown("""
@@ -772,30 +1013,31 @@ elif st.session_state.current_page == "dashboards":
         # Dashboard list
         st.subheader(f"📋 All Dashboards ({len(st.session_state.dashboards)})")
         
-        # Search and filters
-        col1, col2, col3 = st.columns([2, 1, 1])
+        # Add filter tabs for local vs saved
+        tab1, tab2 = st.tabs(["All", "Saved"])
+        
+        with tab1:
+            dashboards = list(st.session_state.dashboards.values())
+        with tab2:
+            dashboards = [d for d in st.session_state.dashboards.values() if d.get('is_saved')]
+
+        # Search and filters (existing code)
+        col1, col2 = st.columns([2, 1])
         with col1:
             search = st.text_input("🔍 Search dashboards", placeholder="Search by name...")
         with col2:
             sort_by = st.selectbox("Sort by", ["Last Modified", "Name", "Created Date"])
-        with col3:
-            filter_status = st.selectbox("Filter", ["All", "Saved", "Drafts"])
-        
+
         st.divider()
         
         # Display dashboards
         dashboards = list(st.session_state.dashboards.values())
         
-        # Apply filters
-        if filter_status == "Saved":
-            dashboards = [d for d in dashboards if d['is_saved']]
-        elif filter_status == "Drafts":
-            dashboards = [d for d in dashboards if not d['is_saved']]
-        
         if search:
             dashboards = [d for d in dashboards if search.lower() in d['name'].lower()]
         
         # Sort dashboards
+        print(dashboards)
         if sort_by == "Name":
             dashboards.sort(key=lambda x: x['name'])
         elif sort_by == "Created Date":
@@ -805,7 +1047,7 @@ elif st.session_state.current_page == "dashboards":
         
         if dashboards:
             for dashboard in dashboards:
-                render_dashboard_summary(dashboard)
+                render_dashboard_summary_with_load(dashboard)  # New function below
                 st.divider()
         else:
             st.info("No dashboards match your search criteria.")
@@ -958,7 +1200,7 @@ elif st.session_state.current_page == "import_export":
                             # Handle data placeholders
                             for viz in dashboard_to_import["visualizations"]:
                                 if isinstance(viz.get("data"), str) and "placeholder" in viz["data"]:
-                                    new_viz = generator.generate_visualization("regenerate data")
+                                    new_viz = generator.generate_visualization_simple("regenerate data")
                                     viz["data"] = new_viz["data"]
                             
                             dashboard_id = dashboard_to_import["id"]
@@ -1167,14 +1409,3 @@ elif st.session_state.current_page == "data_sources":
                     st.write(f"{status_color} {ds['status'].title()}")
         else:
             st.info("No data sources to test.")
-
-# Footer
-st.divider()
-st.markdown("""
-<div style='text-align: center; color: #64748b; padding: 2rem;'>
-    <p style="margin: 0; font-weight: 600;">🎨 Dashboard AI Studio</p>
-    <p style="margin: 0.5rem 0 0 0; font-size: 0.875rem;">
-        Built with Streamlit • Powered by AI • Made with ❤️
-    </p>
-</div>
-""", unsafe_allow_html=True)
