@@ -133,41 +133,60 @@ class DataSourceConnector:
     
     async def _get_mongodb_schema(self) -> Dict[str, Any]:
         """Get MongoDB schema (collection info)"""
-        connection_string = (
-            self.connection_info.get("connection_string") or
-            f"mongodb://{self.connection_info.get('host', 'localhost')}:"
-            f"{self.connection_info.get('port', 27017)}"
-        )
+        host = self.connection_info.get('host', 'localhost')
+        port = self.connection_info.get('port', 27017)
+        username = self.connection_info.get('username')
+        password = self.connection_info.get('password')
+        database = self.connection_info.get('database')
         
-        client = pymongo.MongoClient(connection_string)
-        db = client[self.connection_info.get("database")]
+        # Build connection string
+        if self.connection_info.get("connection_string"):
+            connection_string = self.connection_info["connection_string"]
+        elif username and password:
+            connection_string = f"mongodb://{username}:{password}@{host}:{port}/{database}"
+        else:
+            connection_string = f"mongodb://{host}:{port}"
         
-        collections = []
-        for collection_name in db.list_collection_names():
-            collection = db[collection_name]
+        client = None
+        try:
+            client = pymongo.MongoClient(connection_string, serverSelectionTimeoutMS=5000)
+            db = client[database]
             
-            # Get document count
-            doc_count = collection.count_documents({})
+            # Test connection first
+            db.command("ping")
             
-            # Sample a document to infer schema
-            sample_doc = collection.find_one()
-            columns = []
+            collections = []
+            for collection_name in db.list_collection_names():
+                collection = db[collection_name]
+                
+                # Get document count
+                doc_count = collection.count_documents({})
+                
+                # Sample a document to infer schema
+                sample_doc = collection.find_one()
+                columns = []
+                
+                if sample_doc:
+                    for key, value in sample_doc.items():
+                        columns.append({
+                            "name": key,
+                            "type": type(value).__name__,
+                            "nullable": True
+                        })
+                
+                collections.append({
+                    "name": collection_name,
+                    "columns": columns,
+                    "row_count": doc_count
+                })
             
-            if sample_doc:
-                for key, value in sample_doc.items():
-                    columns.append({
-                        "name": key,
-                        "type": type(value).__name__,
-                        "nullable": True
-                    })
+            return {"tables": collections}
             
-            collections.append({
-                "name": collection_name,
-                "columns": columns,
-                "row_count": doc_count
-            })
-        
-        return {"tables": collections}
+        except Exception as e:
+            raise Exception(f"MongoDB schema extraction failed: {str(e)}")
+        finally:
+            if client:
+                client.close()
     
     def _build_sql_connection_url(self) -> str:
         """Build SQL connection URL from connection info"""
@@ -203,3 +222,4 @@ class DataSourceConnector:
             return f"sqlite:///{database}"
         
         raise ValueError(f"Cannot build connection URL for type: {self.type}")
+    
