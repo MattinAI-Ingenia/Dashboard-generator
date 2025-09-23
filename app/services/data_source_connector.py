@@ -172,10 +172,15 @@ class DataSourceConnector:
     def _build_sql_connection_url(self) -> str:
         """Build SQL connection URL from connection info"""
         info = self.connection_info
+    
+        # Parse JSON string if needed
+        if isinstance(info, str):
+            import json
+            info = json.loads(info)
         
         if info.get("connection_string"):
             return info["connection_string"]
-        
+    
         host = info.get("host", "localhost")
         port = info.get("port")
         database = info.get("database")
