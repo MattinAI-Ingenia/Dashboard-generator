@@ -6,6 +6,7 @@ import uuid
 import json
 import time
 from typing import Dict, List, Any
+import plotly.express as px
 
 from utils.dashboard_api import DashboardApi
 
@@ -529,7 +530,7 @@ def render_dashboard_summary_with_load(dashboard: Dict[str, Any]):
                 # Delete from API if it's saved
                 if dashboard.get('is_saved') and dashboard_id:
                     with st.spinner("Deleting from database..."):
-                        if delete_dashboard_from_api(dashboard_id):
+                        if dash_api.delete_dashboard_from_api(dashboard_id):
                             st.success("✅ Dashboard deleted from database")
                         else:
                             st.error("❌ Failed to delete from database")
