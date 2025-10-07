@@ -7,6 +7,7 @@ import json
 import time
 from typing import Dict, List, Any
 import plotly.express as px
+import requests
 
 from utils.dashboard_api import DashboardApi
 
@@ -188,27 +189,110 @@ class DashboardGenerator:
         """Generate fake visualization metadata - NO real query execution here"""
         if viz_id is None:
             viz_id = str(uuid.uuid4())
+
+        #conseguimos schema de bd
+        # print('get_schema')
+        # schema=dash_api.get_data_source_schema(10)
+        # print(schema)
+        # url_get_schema="http://anonymization_server:8000/get_postgres_schema?connection_str=postgresql%3A%2F%2Fpostgres%3Apostgres%40postgres-flows%3A5432%2Fpostgres"
+        schema = dash_api.call_api(f"/data-sources/{10}/schema")
+        print(type(schema))
+        # schema_req=requests.post(url_get_schema, data=data)
+        # schema=schema_req.json()
+
+        try:
+            #cambiar la llamada para llamarla desde el cliente langflow
+            # response_generate_sql = asyncio.run(test_langflow.run_with_tweaks(query, json.dumps(schema)))
+            # st.write('post response')
+            # st.write(response_generate_sql)
+
+            url_generate_sql = "http://localhost:7860/api/v1/run/637a783b-9401-4fb8-a817-b840b0d49eed"
+            payload = {
+                "output_type": "text",
+                "input_value": "",
+                "tweaks":{
+                    "Query":{
+                        "query": query
+                    },
+                    "Esquema":{
+                        "schema": json.dumps(schema)
+                    }
+                }
+            }
+            headers = {"Content-Type": "application/json"}
+
+            response_generate_sql = requests.post(url_generate_sql, json=payload, headers=headers)
+            response_generate_sql.raise_for_status()
+            response_generate_sql_dict = response_generate_sql.json()
+            sql = response_generate_sql_dict["outputs"][0]["outputs"][0]["results"]["text"]["data"]["text"]
+            # query_dict = json.loads(raw_sql)
+
+            # # Extraer solo la consulta SQL
+            # sql = query_dict.get("query", "").strip()
+            # print(sql)
+            #valdate sql
+            url_validate_sql="http://localhost:7000/validate_sql"
+            validation_body={
+                'query':sql,
+                'schema':json.dumps(schema)
+            }
+            validation_req=requests.post(url_validate_sql, json=validation_body)
+            valid=validation_req.json()
+            print('primer annonimization')
+            print(valid)
+            if valid.get("valid") is True:
+                print("La validación pasó ✅")
+                # url_get_data="http://localhost:7000/execute_sql?connection_str=postgresql%3A%2F%2Fpostgres%3Apostgres%40localhost%3A5432%2Fpostgres"
+                url_get_data="http://localhost:7000/execute_sql"
+                get_data_body={
+                    'valid':True,
+                    'error':None,
+                    'query': sql
+                }
+                connection_str = "postgresql://postgres:postgres@localhost:5432/postgres"
+                payload_with_conn = {**get_data_body, "connection_str": connection_str}
+                get_data_req = requests.post(url_get_data, json=payload_with_conn)
+                # get_data_req=requests.post(url_get_data, json=get_data_body)
+                data=get_data_req.json()
+                print(data)
+
+            else:
+                print("La validación falló ❌")
+                data=None
+            
+            if data:
+                # Convertir a DataFrame
+                df = pd.DataFrame(data["result"])
+                # Elegir tipo de gráfico automáticamente
+                chart_type = choose_chart(df)
+                st.info(f"📌 Gráfico sugerido: **{chart_type}**")
+                fig = plot_chart(df, chart_type)
+                # Return fake visualization with proper structure for saving to database
+                return {
+                    "id": viz_id,
+                    "title": "Sales Revenue by Region",
+                    "description": "Quarterly sales breakdown by geographic region", 
+                    "chart_type": chart_type,
+                    "data_source": "Langflow",  
+                    "query": {
+                        "type": "sql",
+                        "statement": sql,
+                        "parameters": {}
+                    },
+                    "original_query": query,
+                    "config": {
+                        "x_column": "created_at",
+                        "y_column": "count", 
+                        "show_legend": True
+                    },
+                    "created_at": datetime.now().isoformat() + "Z"
+                }
+
+        except Exception as e:
+                            st.error(f"❌ Error calling Langflow API: {e}")
+
         
-        # Return fake visualization with proper structure for saving to database
-        return {
-            "id": viz_id,
-            "title": "Sales Revenue by Region",
-            "description": "Quarterly sales breakdown by geographic region", 
-            "chart_type": "bar_chart",
-            "data_source": "Langflow",  
-            "query": {
-                "type": "sql",
-                "statement": "SELECT COUNT(user_id), created_at FROM dashboard d GROUP BY created_at;",
-                "parameters": {}
-            },
-            "original_query": query,
-            "config": {
-                "x_column": "created_at",
-                "y_column": "count", 
-                "show_legend": True
-            },
-            "created_at": datetime.now().isoformat() + "Z"
-        }
+        
     
     def create_dashboard(self, name: str, description: str = "") -> Dict[str, Any]:
         dashboard_id = str(uuid.uuid4())
@@ -385,6 +469,25 @@ def _render_viz_content(viz: Dict[str, Any], show_controls: bool = False):
 
 def execute_visualization_query(viz_config: Dict[str, Any]) -> Dict[str, Any]:
     """Execute the query for a visualization and return it with data for rendering"""
+    return {
+                    "id": viz_id,
+                    "title": "Sales Revenue by Region",
+                    "description": "Quarterly sales breakdown by geographic region", 
+                    "chart_type": chart_type,
+                    "data_source": "Langflow",  
+                    "query": {
+                        "type": "sql",
+                        "statement": sql,
+                        "parameters": {}
+                    },
+                    "original_query": query,
+                    "config": {
+                        "x_column": "created_at",
+                        "y_column": "count", 
+                        "show_legend": True
+                    },
+                    "created_at": datetime.now().isoformat() + "Z"
+                }
     try:
         # Execute the query using your API
         query_result = dash_api.execute_query(
