@@ -97,7 +97,7 @@ class DataSourceConnector:
             return None
     
     async def _get_sql_schema(self) -> Dict[str, Any]:
-        """Get SQL database schema"""
+        """Get SQL database schema - optimized"""
         connection_url = self._build_sql_connection_url()
         engine = create_engine(connection_url)
         
@@ -106,30 +106,46 @@ class DataSourceConnector:
         
         for table_name in inspector.get_table_names():
             columns = []
+            pk_constraint = inspector.get_pk_constraint(table_name)
+            pk_columns = pk_constraint['constrained_columns'] if pk_constraint else []
+            
             for column in inspector.get_columns(table_name):
-                columns.append({
+                col_info = {
                     "name": column["name"],
-                    "type": str(column["type"]),
-                    "nullable": column.get("nullable", True),
-                    "default_value": column.get("default"),
-                    "is_primary_key": column.get("primary_key", False)
+                    "type": str(column["type"])
+                }
+                
+                # Only add key status if it's a primary key
+                if column["name"] in pk_columns:
+                    col_info["primary_key"] = True
+                    
+                columns.append(col_info)
+            
+            # Get foreign keys
+            foreign_keys = []
+            for fk in inspector.get_foreign_keys(table_name):
+                foreign_keys.append({
+                    "columns": fk['constrained_columns'],
+                    "references": {
+                        "table": fk['referred_table'],
+                        "columns": fk['referred_columns']
+                    }
                 })
             
-            # Get row count
-            try:
-                with engine.connect() as conn:
-                    result = conn.execute(text(f"SELECT COUNT(*) FROM {table_name}"))
-                    row_count = result.scalar()
-            except:
-                row_count = None
-            
-            tables.append({
+            table_info = {
                 "name": table_name,
-                "columns": columns,
-                "row_count": row_count
-            })
+                "columns": columns
+            }
+            
+            if foreign_keys:
+                table_info["foreign_keys"] = foreign_keys
+                
+            tables.append(table_info)
         
-        return {"tables": tables}
+        return {
+            "schema": inspector.default_schema_name,
+            "tables": tables
+            }
     
     async def _get_mongodb_schema(self) -> Dict[str, Any]:
         """Get MongoDB schema (collection info)"""

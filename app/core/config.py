@@ -16,13 +16,10 @@ class Settings(BaseSettings):
     DATABASE_POOL_TIMEOUT: int = int(os.getenv("DATABASE_POOL_TIMEOUT", 60))
     DATABASE_POOL_RECYCLE: int = int(os.getenv("DATABASE_POOL_RECYCLE", 3600))
 
-    # MinIO
-    MINIO_ROOT_USER: str = os.getenv("MINIO_ROOT_USER", "minioadmin")
-    MINIO_ROOT_PASSWORD: str = os.getenv("MINIO_ROOT_PASSWORD", "minioadmin")
-    MINIO_URL: str = os.getenv("MINIO_URL", "localhost:9000")
-    MINIO_SECURE: bool = os.getenv("MINIO_SECURE", "False").lower() == "true"
-    MINIO_CANDIDATES_BUCKET_NAME: str = os.getenv("MINIO_CANDIDATES_BUCKET_NAME", "cvs")
-    MINIO_JOB_OFFERS_BUCKET_NAME: str = os.getenv("MINIO_JOB_OFFERS_BUCKET_NAME", "job_offers")
+    # AI Core
+    AI_CORE_URL: str = os.getenv("AI_CORE_URL", "http://localhost:8000")
+    AI_CORE_API_KEY: str = os.getenv("AI_CORE_API_KEY", "QJ0Md2O3t8DMjT3jU1CwVAuOPoOkYZIp")
+    AI_CORE_TIMEOUT: int = int(os.getenv("AI_CORE_TIMEOUT", 30))
 
     # LangFlow API
     LANGFLOW_API_URL: str = os.getenv("LANGFLOW_API_URL", "localhost:7860")
