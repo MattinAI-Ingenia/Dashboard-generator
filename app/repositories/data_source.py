@@ -91,4 +91,7 @@ class DataSourceRepository(BaseRepository[DataSource, DataSourceCreate, DataSour
         
         return dependent_dashboards
 
+    def get_all(self, db: Session) -> List[DataSource]:
+        return db.query(DataSource).all()
+
 data_source_repository = DataSourceRepository(DataSource)
