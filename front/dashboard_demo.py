@@ -7,19 +7,11 @@ import json
 import time
 from typing import Dict, List, Any
 import plotly.express as px
-import requests
 
 from utils.dashboard_api import DashboardApi
+from components.data_sources import manage_data_sources
 
 dash_api = DashboardApi()
-
-# Configure page
-st.set_page_config(
-    page_title="Dashboard AI Studio",
-    page_icon="🎨",
-    layout="wide",
-    initial_sidebar_state="expanded"
-)
 
 # CSS
 st.markdown("""
@@ -164,6 +156,111 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
+# ===== AUTHENTICATION =====
+def login_page():
+    """Display login form"""
+    st.markdown(
+        """
+        <h3 style='text-align: center;'>🎨 Dashboard AI Studio</h3>
+        """,
+        unsafe_allow_html=True
+    )
+    
+    col1, col2, col3 = st.columns([1, 2, 1])
+    
+    with col2:
+        with st.form("login_form"):
+            email = st.text_input("📧 Email", placeholder="your@email.com")
+            password = st.text_input("🔒 Password", type="password")
+            
+            col_a, col_b = st.columns(2)
+            with col_a:
+                login = st.form_submit_button("🚀 Login", type="primary", use_container_width=True)
+            with col_b:
+                signup = st.form_submit_button("✨ Sign Up", use_container_width=True)
+            
+            if login:
+                user = dash_api.login(email, password)
+                if user:
+                    print(f'Created user:{user}')
+                    st.session_state.authenticated = True
+                    st.session_state.user_id = user.get("id")
+                    st.session_state.user_email = user.get("email")
+                    st.session_state.user_name = user.get("name")
+                    st.rerun()
+                else:
+                    st.error("❌ Invalid credentials")
+            
+            if signup:
+                st.session_state.show_signup = True
+                st.rerun()
+
+def signup_page():
+    """Display signup form"""
+    st.markdown(
+        """
+        <h3 style='text-align: center;'>Create Account</h3>
+        """,
+        unsafe_allow_html=True
+    )
+    
+    col1, col2, col3 = st.columns([1, 2, 1])
+    
+    with col2:
+        with st.form("signup_form"):
+            name = st.text_input("👤 Full Name")
+            email = st.text_input("📧 Email")
+            password = st.text_input("🔒 Password", type="password")
+            password2 = st.text_input("🔒 Confirm Password", type="password")
+            
+            col_a, col_b = st.columns(2)
+            with col_a:
+                signup = st.form_submit_button("✨ Sign Up", type="primary", use_container_width=True)
+            with col_b:
+                back = st.form_submit_button("← Back to Login", use_container_width=True)
+            
+            if signup:
+                if password != password2:
+                    st.error("Passwords don't match")
+                elif len(password) < 6:
+                    st.error("Password too short (min 6 chars)")
+                else:
+                    # Insert into database
+                    try:
+                        dash_api.signup(name, email, password)
+                        time.sleep(2)
+                        st.session_state.show_signup = False
+                        st.rerun()
+                    except:
+                        st.error("Email already exists or DB error")
+            
+            if back:
+                st.session_state.show_signup = False
+                st.rerun()
+
+# ===== MAIN APP =====
+# Initialize auth state FIRST
+if 'authenticated' not in st.session_state:
+    st.session_state.authenticated = False
+
+if 'show_signup' not in st.session_state:
+    st.session_state.show_signup = False
+
+if not st.session_state.authenticated:
+    if st.session_state.show_signup:
+        signup_page()
+    else:
+        login_page()
+    st.stop()
+
+# Configure page
+st.set_page_config(
+    page_title="Dashboard AI Studio",
+    page_icon="🎨",
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
+
 # Initialize session state
 def init_session_state():
     if 'dashboards' not in st.session_state:
@@ -285,12 +382,26 @@ def _render_viz_content(viz: Dict[str, Any], show_controls: bool = False):
             marker_line_width=2
         )
     elif viz['type'] == 'timeseries':
-        fig = px.line(df, x=x_col, y=y_col)
-        fig.update_traces(
-            line_color='rgba(37, 99, 235, 0.9)', 
-            line_width=3,
-            marker=dict(size=6, color='rgba(37, 99, 235, 1)')
-        )
+        y_col = viz['y_column']
+        
+        # Check if y_col contains multiple columns (comma-separated string)
+        if ',' in str(y_col):
+            # Multiple series - melt the dataframe
+            y_cols = [col.strip() for col in y_col.split(',')]
+            df_melted = df.melt(id_vars=[x_col], value_vars=y_cols, 
+                            var_name='series', value_name='value')
+            fig = px.line(df_melted, x=x_col, y='value', color='series')
+        elif len(df.columns) > 2:
+            # Multiple columns in dataframe
+            y_cols = [col for col in df.columns if col != x_col]
+            df_melted = df.melt(id_vars=[x_col], value_vars=y_cols,
+                            var_name='series', value_name='value')
+            fig = px.line(df_melted, x=x_col, y='value', color='series')
+        else:
+            # Single line
+            fig = px.line(df, x=x_col, y=y_col)
+        
+        fig.update_traces(line_width=3, marker=dict(size=6))
     else:
         fig = px.bar(df, x=x_col, y=y_col)
     
@@ -352,6 +463,16 @@ def _render_viz_content(viz: Dict[str, Any], show_controls: bool = False):
                 f'</div>', 
                 unsafe_allow_html=True
             )
+        
+        with st.expander("ℹ️ Execution Info", expanded=False):
+            exec_info = viz.get('execution_info', {})
+            row_count = exec_info.get('row_count', 'N/A')
+            exec_time = exec_info.get('execution_time_ms', 'N/A')
+            sample_data = df.head(5)
+            st.write(f"**Rows Returned:** {row_count}")
+            st.write(f"**Execution Time:** {exec_time} ms")
+            st.write("**Sample Data:**")
+            st.dataframe(sample_data)
     
     return None
 
@@ -505,6 +626,16 @@ def render_dashboard_summary_with_load(dashboard: Dict[str, Any]):
 
 # Sidebar with enhanced navigation
 with st.sidebar:
+
+    st.markdown(f"👤 {st.session_state.user_name}")
+    st.caption(st.session_state.user_email)
+    
+    if st.button("🚪 Logout", use_container_width=True):
+        st.session_state.clear()
+        st.rerun()
+    
+    st.divider()
+
     # Navigation menu
     menu_items = [
         ("🚀 Generate Dashboard", "generate", "Create and edit dashboards"),
@@ -993,136 +1124,4 @@ elif st.session_state.current_page == "import_export":
 elif st.session_state.current_page == "data_sources":
     st.title("🔌 Data Sources")
     
-    # Tabs for different data source operations
-    tab1, tab2, tab3 = st.tabs(["📋 My Sources", "➕ Add Source", "🧪 Test Sources"])
-    
-    with tab1:
-        st.subheader("📋 Your Data Sources")
-        
-        # Fetch data sources from API
-        data_sources = dash_api.call_api("/data-sources/")
-        
-        if data_sources:
-            for ds in data_sources:
-                with st.expander(f"📊 {ds['name']}", expanded=False):
-                    col1, col2, col3 = st.columns([2, 1, 1])
-                    
-                    with col1:
-                        st.write(f"**Type:** {ds['type']}")
-                        st.write(f"**Status:** {ds['status']}")
-                        if ds.get('description'):
-                            st.write(f"**Description:** {ds['description']}")
-                    
-                    with col2:
-                        if st.button("🔍 View Schema", key=f"schema_{ds['id']}"):
-                            schema = dash_api.call_api(f"/data-sources/{ds['id']}/schema")
-                            if schema and schema.get('tables'):
-                                st.subheader("Database Schema")
-                                for table in schema['tables']:
-                                    st.write(f"**{table['name']}** ({table.get('row_count', 'Unknown')} rows)")
-                                    cols_text = ", ".join([col['name'] for col in table['columns']])
-                                    st.caption(f"Columns: {cols_text}")
-                    
-                    with col3:
-                        if st.button("🗑️ Delete", key=f"delete_{ds['id']}", type="secondary"):
-                            if dash_api.call_api(f"/data-sources/{ds['id']}", method="DELETE") is not None:
-                                st.success("Data source deleted!")
-                                st.rerun()
-        else:
-            st.info("No data sources found. Add your first data source in the 'Add Source' tab.")
-    
-    with tab2:
-        st.subheader("➕ Add New Data Source")
-        
-        with st.form("add_data_source"):
-            # First row - basic info
-            st.write("**Basic Information**")
-            col1, col2 = st.columns(2)
-            
-            with col1:
-                name = st.text_input("Name*", placeholder="My Database")
-                description = st.text_area("Description", placeholder="Optional description...")
-            
-            with col2:
-                db_type = st.selectbox("Database Type", ["postgresql", "mysql", "sqlite", "mongodb"])
-                # Show default port based on database type
-                default_ports = {
-                    "postgresql": 5432,
-                    "mysql": 3306,
-                    "sqlite": 0,
-                    "mongodb": 27017
-                }
-                port = st.number_input("Port", value=default_ports.get(db_type, 5432), min_value=0, max_value=65535)
-            
-            st.divider()
-            
-            # Second row - connection details
-            st.write("**Connection Details**")
-            col3, col4 = st.columns(2)
-            
-            with col3:
-                host = st.text_input("Host", value="localhost")
-                database = st.text_input("Database Name*", placeholder="mydb")
-            
-            with col4:
-                username = st.text_input("Username", placeholder="user")
-                password = st.text_input("Password", type="password", placeholder="password")
-            
-            st.divider()
-            
-            submitted = st.form_submit_button("🔗 Add Data Source", type="primary")
-            
-            if submitted and name and database:
-                # Prepare data source config
-                config = {
-                    "name": name,
-                    "description": description,
-                    "type": db_type,
-                    "connection": {
-                        "host": host,
-                        "port": port,
-                        "database": database,
-                        "username": username,
-                        "password": password,
-                        "schema": "public"
-                    }
-                }
-                
-                with st.spinner("Testing connection and adding data source..."):
-                    result = dash_api.call_api("/data-sources/", method="POST", data=config)
-                    
-                if result:
-                    st.success(f"Data source '{name}' added successfully!")
-                    st.rerun()
-            elif submitted:
-                st.error("Please fill in required fields (Name and Database)")
-    
-    with tab3:
-        st.subheader("🧪 Test Connections")
-        
-        data_sources = dash_api.call_api("/data-sources/")
-        
-        if data_sources:
-            for ds in data_sources:
-                col1, col2, col3 = st.columns([2, 1, 1])
-                
-                with col1:
-                    st.write(f"**{ds['name']}** ({ds['type']})")
-                    st.caption(f"Status: {ds['status']}")
-                
-                with col2:
-                    if st.button("🔍 Test", key=f"test_{ds['id']}"):
-                        with st.spinner("Testing connection..."):
-                            result = dash_api.call_api(f"/data-sources/{ds['id']}/test-connection", method="POST")
-                            
-                        if result:
-                            if result.get('connection_successful'):
-                                st.success("Connection successful!")
-                            else:
-                                st.error(f"Connection failed: {result.get('message', 'Unknown error')}")
-                
-                with col3:
-                    status_color = "🟢" if ds['status'] == 'active' else "🔴"
-                    st.write(f"{status_color} {ds['status'].title()}")
-        else:
-            st.info("No data sources to test.")
+    manage_data_sources()

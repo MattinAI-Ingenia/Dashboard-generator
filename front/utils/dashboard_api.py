@@ -202,3 +202,39 @@ class DashboardApi:
             st.error(f"Failed to generate SQL from NLP: {str(e)}")
             return {}
         
+    # USER
+    def get_user_info(self) -> Dict[str, Any]:
+        """Get current user info from backend API"""
+        try:
+            result = self.call_api("/users/me")
+            return result if result else {}
+        except Exception as e:
+            st.error(f"Failed to get user info: {str(e)}")
+            return {}
+    
+    def login(self, email, password):
+        """Login user via backend API"""
+        request_payload = {
+            "email": email,
+            "password": password
+        }
+        try:
+            result = self.call_api("/auth/login", method="POST", data=request_payload)
+            return result if result else {}
+        except Exception as e:
+            st.error(f"Failed to login: {str(e)}")
+            return {}
+        
+    def signup(self, name, email, password):
+        """Signup user via backend API"""
+        request_payload = {
+            "name": name,
+            "email": email,
+            "password": password
+        }
+        try:
+            result = self.call_api("/auth/signup", method="POST", data=request_payload)
+            return result if result else {}
+        except Exception as e:
+            st.error(f"Failed to signup: {str(e)}")
+            return {}
