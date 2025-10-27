@@ -6,7 +6,7 @@ from contextlib import asynccontextmanager
 from sqlalchemy import text
 
 from core.config import settings
-from api.routers import dashboards, data_sources, nlp, queries
+from api.routers import dashboards, data_sources, nlp, queries, user
 from db.models import Base
 from core.database import engine
 
@@ -55,6 +55,8 @@ app.include_router(data_sources.router, prefix=f"{settings.API_V1_STR}/data-sour
 app.include_router(queries.router, prefix=f"{settings.API_V1_STR}/queries", tags=["queries"])
 
 app.include_router(nlp.router, prefix=f"{settings.API_V1_STR}/nlp", tags=["nlp"])
+
+app.include_router(user.router, prefix=f"{settings.API_V1_STR}/auth", tags=["auth"])
 
 @app.get("/")
 def root():
