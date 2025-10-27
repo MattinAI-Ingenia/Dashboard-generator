@@ -76,13 +76,11 @@ def execute_query(
             if request.query.type == QueryType.SQL:
                 results = query_service.execute_sql(
                     statement=request.query.statement,
-                    parameters=request.query.parameters or {},
                     limit=request.limit
                 )
             elif request.query.type == QueryType.MONGODB:
                 results = query_service.execute_mongodb(
                     statement=request.query.statement,
-                    parameters=request.query.parameters or {},
                     limit=request.limit
                 )
             else:

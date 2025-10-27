@@ -17,10 +17,6 @@ class QueryErrorCode(str, Enum):
 class QueryObject(BaseModel):
     type: QueryType = Field(..., description="Type of query to execute")
     statement: str = Field(..., description="The query statement to execute")
-    parameters: Optional[Dict[str, Any]] = Field(
-        default=None,
-        description="Parameters to bind to the query"
-    )
     
     @validator('statement')
     def statement_not_empty(cls, v):
@@ -32,10 +28,7 @@ class QueryObject(BaseModel):
         schema_extra = {
             "example": {
                 "type": "sql",
-                "statement": "SELECT region, SUM(revenue) FROM sales WHERE date >= ? GROUP BY region",
-                "parameters": {
-                    "date_from": "2025-04-01"
-                }
+                "statement": "SELECT region, SUM(revenue) FROM sales WHERE date >= ? GROUP BY region"
             }
         }
 
@@ -48,21 +41,6 @@ class QueryExecuteRequest(BaseModel):
         le=10000,
         description="Maximum number of rows to return"
     )
-    
-    class Config:
-        schema_extra = {
-            "example": {
-                "query": {
-                    "type": "sql",
-                    "statement": "SELECT region, SUM(revenue) FROM sales WHERE date >= ? GROUP BY region",
-                    "parameters": {
-                        "date_from": "2025-04-01"
-                    }
-                },
-                "data_source": "sales_db",
-                "limit": 1000
-            }
-        }
 
 class QueryExecuteResponse(BaseModel):
     data: List[Dict[str, Any]] = Field(..., description="Query result data")
