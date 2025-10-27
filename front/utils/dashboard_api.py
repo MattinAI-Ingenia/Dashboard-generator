@@ -32,7 +32,7 @@ class DashboardApi:
             st.error(f"Connection Error: {str(e)}")
             return None
 
-    # Dashboard Api
+    # DASHBOARD
     def save_dashboard_to_api(self, dashboard: Dict[str, Any]) -> Dict[str, Any]:
         """Save dashboard to backend API"""
         # Convert datetime objects to ISO strings in metadata
@@ -49,18 +49,17 @@ class DashboardApi:
             # Remove pandas DataFrame and other frontend-specific fields
             api_viz = {
                 "id": viz["id"],
-                "title": viz["title"],
-                "description": viz.get("description", ""),
-                "chart_type": viz.get("chart_type", viz.get("type", "bar_chart")),
-                "data_source": viz.get("data_source", "default"),
-                "query": viz.get("query", {
+                "title": viz["result"]["title"],
+                "description": viz["result"].get("description", ""),
+                "chart_type": viz["result"].get("chart_type", "table"),
+                "data_source": viz["result"].get("data_source", ""),
+                "query": {
                     "type": "sql",
-                    "statement": viz.get("generated_sql", "SELECT 1"),
-                    "parameters": {}
-                }),
-                "original_query": viz.get("original_query", viz.get("description", "")),
-                "config": viz.get("config", {}),
-                "created_at": viz.get("created_at", datetime.now().isoformat() + "Z")
+                    "statement": viz["result"].get("sql", "")
+                },
+                "original_query": viz["result"].get("original_user_query", ""),
+                "config": viz["result"].get("config", {}),
+                "created_at": datetime.now().isoformat() + "Z"
             }
             api_visualizations.append(api_viz)
         
@@ -68,15 +67,7 @@ class DashboardApi:
         dashboard_data = {
             "name": dashboard["name"],
             "description": dashboard.get("description", ""),
-            "visualizations": api_visualizations,
-            "layout": {
-                "type": "grid",
-                "grid_config": {
-                    "columns": 3,
-                    "gap": 16
-                },
-                "visualization_positions": {}
-            }
+            "visualizations": api_visualizations
         }
 
         # If dashboard has an ID, it's an update
@@ -105,12 +96,27 @@ class DashboardApi:
         try:
             result = self.call_api(f"/dashboards/{dashboard_id}")
             if result:
-                # Convert API response back to frontend format
+                # Transform API visualizations to frontend format
+                visualizations = []
+                for viz in result["dashboard_data"].get("visualizations", []):
+                    visualizations.append({
+                        "id": viz["id"],
+                        "result": {  # Wrap in "result" key for frontend compatibility
+                            "title": viz["title"],
+                            "description": viz.get("description", ""),
+                            "chart_type": viz.get("chart_type", "table"),
+                            "data_source": viz.get("data_source", ""),
+                            "sql": viz["query"]["statement"],
+                            "original_user_query": viz.get("original_query", ""),
+                            "config": viz.get("config", {})
+                        }
+                    })
+                
                 dashboard = {
                     "id": result["id"],
                     "name": result["dashboard_data"]["name"],
                     "description": result["dashboard_data"].get("description", ""),
-                    "visualizations": result["dashboard_data"].get("visualizations", []),
+                    "visualizations": visualizations,  # Use transformed visualizations
                     "layout": result["dashboard_data"].get("layout", {"type": "grid", "responsive": True}),
                     "metadata": {
                         "created_at": datetime.fromisoformat(result["created_at"].replace("Z", "+00:00")),
@@ -167,13 +173,9 @@ class DashboardApi:
             st.error(f"Failed to delete dashboard: {str(e)}")
             return False
 
-    # Query Api
+    # QUERY
     def execute_query(self, data_source: str, query: str) -> Dict[str, Any]:
         """Execute query via backend API"""
-        print(f"=== EXECUTE_QUERY CALLED ===")
-        print(f"Data source: {data_source}")
-        print(f"Query: {query[:100]}...") 
-
         request_payload = {
             "data_source": data_source,
             "query": {
@@ -181,7 +183,6 @@ class DashboardApi:
                 "statement": query
             }
         }
-              
         try:
             result = self.call_api("/queries/execute", method="POST", data=request_payload)
             return result
@@ -200,3 +201,4 @@ class DashboardApi:
         except Exception as e:
             st.error(f"Failed to generate SQL from NLP: {str(e)}")
             return {}
+        

@@ -214,8 +214,8 @@ class QueryExecutorService:
                 )
         
         # Ensure it's a SELECT statement
-        if not cleaned.startswith('SELECT'):
-            raise QueryValidationError("Only SELECT queries are allowed")
+        if not cleaned.startswith('SELECT') or cleaned.startswith('WITH'):
+            raise QueryValidationError("Only SELECT/WITH queries are allowed")
     
     def _add_limit_to_sql(self, statement: str, limit: int) -> str:
         """Add LIMIT clause to SQL if not present"""

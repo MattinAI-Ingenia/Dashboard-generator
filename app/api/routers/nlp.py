@@ -30,6 +30,7 @@ class SQLGenerationResult(BaseModel):
     title: str
     description: str
     data_source: str
+    original_user_query: str
     chart_type: Optional[str] = None
     config: Optional[Dict[str, Any]] = None
 
@@ -191,6 +192,7 @@ Generate a SQL query for resolving the user query.
             success=True,
             result=SQLGenerationResult(
                 sql=parsed_generated_sql.get("query", ""),
+                original_user_query=request.query,
                 title=parsed_metadata.get("title", ""),
                 description=parsed_metadata.get("description", ""),
                 data_source=database_name,
