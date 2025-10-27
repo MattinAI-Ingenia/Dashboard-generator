@@ -143,7 +143,7 @@ class DataSourceConnector:
             tables.append(table_info)
         
         return {
-            "schema": inspector.default_schema_name,
+            "schema_name": inspector.default_schema_name,
             "tables": tables
             }
     

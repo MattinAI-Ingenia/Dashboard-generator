@@ -59,7 +59,6 @@ class QueryExecutorService:
     def execute_sql(
         self, 
         statement: str, 
-        parameters: Dict[str, Any], 
         limit: int = 1000
     ) -> List[Dict[str, Any]]:
         """Execute SQL query and return results"""
@@ -78,8 +77,7 @@ class QueryExecutorService:
             with engine.connect() as connection:
                 # Execute query with parameters
                 result = connection.execute(
-                    text(limited_statement),
-                    parameters
+                    text(limited_statement)
                 )
                 
                 # Convert to list of dictionaries
