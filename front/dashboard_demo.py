@@ -185,117 +185,6 @@ class DashboardGenerator:
     def __init__(self):
         pass
     
-    def generate_visualization_simple(self, query: str, viz_id: str = None) -> Dict[str, Any]:
-        """Generate fake visualization metadata - NO real query execution here"""
-        if viz_id is None:
-            viz_id = str(uuid.uuid4())
-
-        #conseguimos schema de bd
-        # print('get_schema')
-        # schema=dash_api.get_data_source_schema(10)
-        # print(schema)
-        # url_get_schema="http://anonymization_server:8000/get_postgres_schema?connection_str=postgresql%3A%2F%2Fpostgres%3Apostgres%40postgres-flows%3A5432%2Fpostgres"
-        schema = dash_api.call_api(f"/data-sources/{10}/schema")
-        print(type(schema))
-        # schema_req=requests.post(url_get_schema, data=data)
-        # schema=schema_req.json()
-
-        try:
-            #cambiar la llamada para llamarla desde el cliente langflow
-            # response_generate_sql = asyncio.run(test_langflow.run_with_tweaks(query, json.dumps(schema)))
-            # st.write('post response')
-            # st.write(response_generate_sql)
-
-            url_generate_sql = "http://localhost:7860/api/v1/run/637a783b-9401-4fb8-a817-b840b0d49eed"
-            payload = {
-                "output_type": "text",
-                "input_value": "",
-                "tweaks":{
-                    "Query":{
-                        "query": query
-                    },
-                    "Esquema":{
-                        "schema": json.dumps(schema)
-                    }
-                }
-            }
-            headers = {"Content-Type": "application/json"}
-
-            response_generate_sql = requests.post(url_generate_sql, json=payload, headers=headers)
-            response_generate_sql.raise_for_status()
-            response_generate_sql_dict = response_generate_sql.json()
-            sql = response_generate_sql_dict["outputs"][0]["outputs"][0]["results"]["text"]["data"]["text"]
-            # query_dict = json.loads(raw_sql)
-
-            # # Extraer solo la consulta SQL
-            # sql = query_dict.get("query", "").strip()
-            # print(sql)
-            #valdate sql
-            url_validate_sql="http://localhost:7000/validate_sql"
-            validation_body={
-                'query':sql,
-                'schema':json.dumps(schema)
-            }
-            validation_req=requests.post(url_validate_sql, json=validation_body)
-            valid=validation_req.json()
-            print('primer annonimization')
-            print(valid)
-            if valid.get("valid") is True:
-                print("La validación pasó ✅")
-                # url_get_data="http://localhost:7000/execute_sql?connection_str=postgresql%3A%2F%2Fpostgres%3Apostgres%40localhost%3A5432%2Fpostgres"
-                url_get_data="http://localhost:7000/execute_sql"
-                get_data_body={
-                    'valid':True,
-                    'error':None,
-                    'query': sql
-                }
-                connection_str = "postgresql://postgres:postgres@localhost:5432/postgres"
-                payload_with_conn = {**get_data_body, "connection_str": connection_str}
-                get_data_req = requests.post(url_get_data, json=payload_with_conn)
-                # get_data_req=requests.post(url_get_data, json=get_data_body)
-                data=get_data_req.json()
-                print(data)
-
-            else:
-                print("La validación falló ❌")
-                data=None
-            
-            if data:
-                # Convertir a DataFrame
-                df = pd.DataFrame(data["result"])
-                # Elegir tipo de gráfico automáticamente
-                chart_type = choose_chart(df)
-                st.info(f"📌 Gráfico sugerido: **{chart_type}**")
-                fig = plot_chart(df, chart_type)
-                # Return fake visualization with proper structure for saving to database
-                return {
-                    "id": viz_id,
-                    "title": "Sales Revenue by Region",
-                    "description": "Quarterly sales breakdown by geographic region", 
-                    "chart_type": chart_type,
-                    "data_source": "Langflow",  
-                    "query": {
-                        "type": "sql",
-                        "statement": sql,
-                        "parameters": {}
-                    },
-                    "original_query": query,
-                    "config": {
-                        "x_column": "created_at",
-                        "y_column": "count", 
-                        "show_legend": True
-                    },
-                    "created_at": datetime.now().isoformat() + "Z"
-                }
-
-        except Exception as e:
-                            st.error(f"❌ Error calling Langflow API: {e}")
-
-    def generate_viz_api(self, query: str) -> Dict[str, Any]:
-        """Generate a new dashboard structure"""
-        sql_result = dash_api.generate_sql_from_nlp(query)
-        return sql_result
-    
     def create_dashboard(self, name: str, description: str = "") -> Dict[str, Any]:
         dashboard_id = str(uuid.uuid4())
         
@@ -328,7 +217,6 @@ generator = get_dashboard_generator()
 def render_visualization(viz: Dict[str, Any], show_controls: bool = False):
     """Render a visualization with optional controls"""
     container_class = ""
-    print(f"visualization:{viz}")
     st.markdown(f'<div class="{container_class}">', unsafe_allow_html=True)
     
     # Handle error visualizations
@@ -379,14 +267,14 @@ def _render_viz_content(viz: Dict[str, Any], show_controls: bool = False):
     y_col = viz['y_column']
     
     # Create compact visualization
-    if viz['type'] == 'bar_chart':
+    if viz['type'] == 'barchart':
         fig = px.bar(df, x=x_col, y=y_col)
         fig.update_traces(
             marker_color='rgba(37, 99, 235, 0.8)',
             marker_line_color='rgba(37, 99, 235, 1)',
             marker_line_width=1
         )
-    elif viz['type'] == 'pie_chart':
+    elif viz['type'] == 'piechart':
         fig = px.pie(df, names=x_col, values=y_col)
         fig.update_traces(
             textposition='inside', 
@@ -396,7 +284,7 @@ def _render_viz_content(viz: Dict[str, Any], show_controls: bool = False):
             marker_line_color='white',
             marker_line_width=2
         )
-    elif viz['type'] == 'line_chart':
+    elif viz['type'] == 'timeseries':
         fig = px.line(df, x=x_col, y=y_col)
         fig.update_traces(
             line_color='rgba(37, 99, 235, 0.9)', 
@@ -443,8 +331,6 @@ def _render_viz_content(viz: Dict[str, Any], show_controls: bool = False):
     
     # Compact SQL view (only when controls shown)
     if show_controls:
-        # Create a unique container with custom CSS for this specific expander
-        viz_container_key = f"viz_sql_{viz['id']}"
         
         # Add custom CSS just for this visualization's SQL expander
         st.markdown(f"""
@@ -510,11 +396,10 @@ def execute_visualization_query(viz_config: Dict[str, Any]) -> Dict[str, Any]:
             **viz_config,
             "type": "error",
             "data": pd.DataFrame(),
-            "error": str(e),
-            "generated_sql": viz_config["result"]["sql"]
+            "error": str(e)
         }
 
-# NEW: Function to load dashboard and execute all visualization queries
+# Function to load dashboard and execute all visualization queries
 def load_dashboard_with_data(dashboard: Dict[str, Any]) -> Dict[str, Any]:
     """Load dashboard and execute all visualization queries to get live data"""
     dashboard_with_data = dashboard.copy()
@@ -523,7 +408,8 @@ def load_dashboard_with_data(dashboard: Dict[str, Any]) -> Dict[str, Any]:
     visualizations_with_data = []
     
     for viz_config in dashboard["visualizations"]:
-        with st.spinner(f"Loading {viz_config['title']}..."):
+        title = viz_config.get('title') or viz_config.get('result', {}).get('title', 'Visualization')
+        with st.spinner(f"Loading {title}..."):
             viz_with_data = execute_visualization_query(viz_config)
             visualizations_with_data.append(viz_with_data)
     
@@ -754,18 +640,16 @@ if st.session_state.current_page == "generate":
                         progress.progress(i + 1)
                     
                     # Generate fake visualization config
-                    viz_config = generator.generate_viz_api(query)
+                    viz_config = dash_api.generate_sql_from_nlp(query)
 
                     if "id" not in viz_config or viz_config["id"] is None:
                         viz_config["id"] = str(uuid.uuid4())
 
-                    print(f"viz_config generated: {viz_config}")
                     viz_with_data = execute_visualization_query(viz_config)
                     print()
                     print(f"viz_with_data generated: {viz_with_data}")
                     print()
                     dashboard['visualizations'].append(viz_with_data)
-                    dashboard['metadata']['queries'].append(query)
                     dashboard['metadata']['last_modified'] = datetime.now()
                     
                     progress.empty()
