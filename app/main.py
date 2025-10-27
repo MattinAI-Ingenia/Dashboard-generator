@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    logger.info("Creating database tables...")
+    logger.info(" Creating database tables...")
     try:
         with engine.connect() as conn:
             with conn.begin():
@@ -54,11 +54,7 @@ app.include_router(data_sources.router, prefix=f"{settings.API_V1_STR}/data-sour
 
 app.include_router(queries.router, prefix=f"{settings.API_V1_STR}/queries", tags=["queries"])
 
-# app.include_router(
-#     nlp.router,
-#     prefix=f"{settings.API_V1_STR}/nlp",
-#     tags=["nlp"]
-# )
+app.include_router(nlp.router, prefix=f"{settings.API_V1_STR}/nlp", tags=["nlp"])
 
 @app.get("/")
 def root():
@@ -72,3 +68,7 @@ async def health_check():
         "service": settings.PROJECT_NAME,
         "version": "1.0.0"
     }
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)

@@ -7,7 +7,7 @@ import logging
 import json
 
 from core.database import get_db
-from services.ai_core_client import get_ai_client, AICoreClient
+from services.ai_core_client.ai_core_client import get_ai_client, AICoreClient
 # from services.nlp.datasource_selector import DatasourceSelector
 from repositories.data_source import data_source_repository
 
@@ -27,15 +27,16 @@ class DatasourceInfo(BaseModel):
 
 class SQLGenerationResult(BaseModel):
     sql: str
-    datasource: DatasourceInfo
-    confidence: float
-    explanation: Optional[str] = None
+    title: str
+    description: str
+    data_source: str
+    chart_type: Optional[str] = None
+    config: Optional[Dict[str, Any]] = None
 
 class NLPQueryResponse(BaseModel):
     success: bool
     result: Optional[SQLGenerationResult] = None
     error: Optional[str] = None
-    suggestions: Optional[List[str]] = None
 
 def get_ai_client() -> AICoreClient:
     return AICoreClient()
@@ -61,14 +62,34 @@ async def generate_sql_from_nlp(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="No datasources configured"
             )
+
+        # Step 2: Extract metadata
+        prompt_message = f"""
+### USER QUERY:
+{request.query}
+"""
+        logger.info(f"Extracting metadata for query: {request.query}")
+        metadata_response = await ai_client.chat(
+            message=prompt_message,
+            agent_id=3, 
+            app_id=1    
+        )
+        metadata_response = metadata_response.get("response", "{}")
+
+        try:
+            parsed_metadata = json.loads(metadata_response)
+        except json.JSONDecodeError:
+            raise ValueError("AI response is not valid JSON")
         
+        logger.info(f"Metadata extraction response: {parsed_metadata}")
+
         # Step 2: Select appropriate datasource
         datasources_info = [
             {"name": ds.name, "schema": ds.schema_data} for ds in datasources
         ]
 
         prompt_message = f"""
-Select the most appropriate datasource from a list for a user query.
+Select the most appropriate datasource for a user query.
 
 ### AVAILABLE DATASOURCES:
 {json.dumps(datasources_info)}
@@ -78,7 +99,7 @@ Select the most appropriate datasource from a list for a user query.
 """
 
         logger.info(f"Selecting datasource for query: {request.query}")
-        logger.info(f"Prompt message for datasource selection: {prompt_message}")
+        # logger.info(f"Prompt message for datasource selection: {prompt_message}")
         selected_datasource = await ai_client.chat(
             message=prompt_message,
             agent_id=2, 
@@ -108,29 +129,45 @@ Select the most appropriate datasource from a list for a user query.
             )
         
         # Prepare schema for AI service
-        schema = selected_datasource_details.get('schema_data', {})
+        schema = selected_datasource_details.schema_data or {}
         
         # Step 4: Call AI service to generate SQL
-        logger.info(f"Generating SQL for datasource: {datasource_details.name}")
+        # logger.info(f"Generating SQL for datasource: {schema}")
+
+        prompt_message = f"""
+Generate a SQL query for resolving the user query.
+
+### AVAILABLE DATASOURCE:
+{json.dumps(schema)}
+
+### USER QUERY:
+{request.query}
+"""
+
+        logger.info(f"Prompt message for SQL generation: {prompt_message}")
+
+        generated_sql = await ai_client.chat(
+            message=prompt_message,
+            app_id=1,
+            agent_id=1
+        )
+
+        if not generated_sql:
+            return NLPQueryResponse(
+                success=False,
+                error="AI service returned empty SQL",
+                suggestions=["Try rephrasing your query", "Be more specific about what data you need"]
+            )
+        
+        generated_sql = generated_sql.get("response", "{}")
+
         try:
-            generated_sql = await ai_client.generate_sql(
-                prompt=request.query,
-                schema=schema
-            )
-        except httpx.HTTPError as e:
-            logger.error(f"AI service error: {str(e)}")
-            raise HTTPException(
-                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail=f"AI service unavailable: {str(e)}"
-            )
-        
-        # if not generated_sql:
-        #     return NLPQueryResponse(
-        #         success=False,
-        #         error="AI service returned empty SQL",
-        #         suggestions=["Try rephrasing your query", "Be more specific about what data you need"]
-        #     )
-        
+            parsed_generated_sql = json.loads(generated_sql)
+        except json.JSONDecodeError:
+            raise ValueError("AI response is not valid JSON")
+
+        logger.info(f"Parsed generated SQL response: {parsed_generated_sql}")
+
         # # Step 5: Validate with AI service
         # try:
         #     is_valid = await ai_client.validate_query(
@@ -150,22 +187,17 @@ Select the most appropriate datasource from a list for a user query.
         #     )
         
         # Return successful result
-        # return NLPQueryResponse(
-        #     success=True,
-        #     result=SQLGenerationResult(
-        #         sql=generated_sql,
-        #         datasource=DatasourceInfo(
-        #             id=datasource_details.id,
-        #             name=datasource_details.name,
-        #             type=datasource_details.type,
-        #             schema_info=schema
-        #         ),
-        #         confidence=0.8,  # Could be returned by AI service
-        #         explanation=f"Query generated for {datasource_details.name} datasource"
-        #     )
-        # )
-
-        return selected_datasource_details
+        return NLPQueryResponse(
+            success=True,
+            result=SQLGenerationResult(
+                sql=parsed_generated_sql.get("query", ""),
+                title=parsed_metadata.get("title", ""),
+                description=parsed_metadata.get("description", ""),
+                data_source=database_name,
+                chart_type=parsed_metadata.get("chart_type"),
+                config= {"x_column": parsed_generated_sql.get("x_column"), "y_column": parsed_generated_sql.get("y_column")}
+            )
+        )
     
     except HTTPException:
         raise
