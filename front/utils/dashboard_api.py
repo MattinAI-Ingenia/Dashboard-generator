@@ -170,17 +170,33 @@ class DashboardApi:
     # Query Api
     def execute_query(self, data_source: str, query: str) -> Dict[str, Any]:
         """Execute query via backend API"""
+        print(f"=== EXECUTE_QUERY CALLED ===")
+        print(f"Data source: {data_source}")
+        print(f"Query: {query[:100]}...") 
+
         request_payload = {
             "data_source": data_source,
             "query": {
                 "type": "sql",
-                "statement": query,
-                "parameters": {}
+                "statement": query
             }
         }
+              
         try:
             result = self.call_api("/queries/execute", method="POST", data=request_payload)
             return result
         except Exception as e:
             st.error(f"Failed to execute query: {str(e)}")
+            return {}
+
+    def generate_sql_from_nlp(self, nlp_query: str) -> Dict[str, Any]:
+        """Generate SQL from natural language query via backend API"""
+        request_payload = {
+            "query": nlp_query
+        }
+        try:
+            result = self.call_api("/nlp/query", method="POST", data=request_payload)
+            return result
+        except Exception as e:
+            st.error(f"Failed to generate SQL from NLP: {str(e)}")
             return {}

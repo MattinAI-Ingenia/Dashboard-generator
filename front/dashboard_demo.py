@@ -291,8 +291,10 @@ class DashboardGenerator:
         except Exception as e:
                             st.error(f"❌ Error calling Langflow API: {e}")
 
-        
-        
+    def generate_viz_api(self, query: str) -> Dict[str, Any]:
+        """Generate a new dashboard structure"""
+        sql_result = dash_api.generate_sql_from_nlp(query)
+        return sql_result
     
     def create_dashboard(self, name: str, description: str = "") -> Dict[str, Any]:
         dashboard_id = str(uuid.uuid4())
@@ -326,15 +328,15 @@ generator = get_dashboard_generator()
 def render_visualization(viz: Dict[str, Any], show_controls: bool = False):
     """Render a visualization with optional controls"""
     container_class = ""
-    
+    print(f"visualization:{viz}")
     st.markdown(f'<div class="{container_class}">', unsafe_allow_html=True)
     
     # Handle error visualizations
     if viz.get('type') == 'error':
-        st.error(f"❌ {viz['title']}: {viz['description']}")
+        st.error(f"❌ {viz['result']['title']}: {viz['result']['description']}")
         if show_controls:
             with st.expander("📝 Failed Query", expanded=False):
-                st.code(viz['generated_sql'], language='sql')
+                st.code(viz['result']['sql'], language='sql')
         st.markdown('</div>', unsafe_allow_html=True)
         return None
     
@@ -358,7 +360,7 @@ def _render_viz_content(viz: Dict[str, Any], show_controls: bool = False):
     col1, col2 = st.columns([4, 1])
 
     with col1:
-        st.markdown(f'<p style="color: #FFFFFF; font-weight: bold; margin-bottom: 0.5rem;">📊 {viz["title"]}</p>', unsafe_allow_html=True)
+        st.markdown(f'<p style="color: #FFFFFF; font-weight: bold; margin-bottom: 0.5rem;">📊 {viz["result"]["title"]}</p>', unsafe_allow_html=True)
         if show_controls:
             st.caption(viz.get('description', ''))
     
@@ -469,63 +471,33 @@ def _render_viz_content(viz: Dict[str, Any], show_controls: bool = False):
 
 def execute_visualization_query(viz_config: Dict[str, Any]) -> Dict[str, Any]:
     """Execute the query for a visualization and return it with data for rendering"""
-    return {
-                    "id": viz_id,
-                    "title": "Sales Revenue by Region",
-                    "description": "Quarterly sales breakdown by geographic region", 
-                    "chart_type": chart_type,
-                    "data_source": "Langflow",  
-                    "query": {
-                        "type": "sql",
-                        "statement": sql,
-                        "parameters": {}
-                    },
-                    "original_query": query,
-                    "config": {
-                        "x_column": "created_at",
-                        "y_column": "count", 
-                        "show_legend": True
-                    },
-                    "created_at": datetime.now().isoformat() + "Z"
-                }
     try:
         # Execute the query using your API
         query_result = dash_api.execute_query(
-            data_source=viz_config["data_source"],
-            query=viz_config["query"]["statement"]
+            data_source=viz_config["result"]["data_source"],
+            query=viz_config["result"]["sql"]
         )
-        
+        print()
+        print(f'query_result: {query_result}')
+        print()
         if not query_result or not query_result.get("data"):
             raise Exception("No data returned from query")
         
         # Convert to DataFrame
         df = pd.DataFrame(query_result["data"])
-        
-        # Auto-detect best columns for the chart type
-        numeric_cols = df.select_dtypes(include=['number']).columns.tolist()
-        categorical_cols = df.select_dtypes(include=['object', 'category']).columns.tolist()
-        
+ 
         # Use config columns if they exist in the data, otherwise auto-detect
-        x_column = viz_config["config"].get("x_column")
-        y_column = viz_config["config"].get("y_column")
-        
-        if x_column not in df.columns or y_column not in df.columns:
-            # Fallback to auto-detection
-            if len(categorical_cols) >= 1 and len(numeric_cols) >= 1:
-                x_column = categorical_cols[0]
-                y_column = numeric_cols[0]
-            else:
-                x_column = df.columns[0] if len(df.columns) > 0 else 'x'
-                y_column = df.columns[1] if len(df.columns) > 1 else 'y'
-        
+        x_column = viz_config["result"]["config"].get("x_column")
+        y_column = viz_config["result"]["config"].get("y_column")
+
         # Return visualization with data for rendering
         return {
             **viz_config,  # Keep all original config
             "data": df,    # Add actual data for rendering
             "x_column": x_column,
             "y_column": y_column,
-            "type": viz_config["chart_type"],  # Map chart_type to type for render function
-            "generated_sql": viz_config["query"]["statement"],  # For SQL display
+            "type": viz_config["result"]["chart_type"],  # Map chart_type to type for render function
+            "generated_sql": viz_config["result"]["sql"],  # For SQL display
             "execution_info": {
                 "row_count": query_result.get("row_count", len(df)),
                 "execution_time_ms": query_result.get("execution_time_ms", 0)
@@ -539,7 +511,7 @@ def execute_visualization_query(viz_config: Dict[str, Any]) -> Dict[str, Any]:
             "type": "error",
             "data": pd.DataFrame(),
             "error": str(e),
-            "generated_sql": viz_config["query"]["statement"]
+            "generated_sql": viz_config["result"]["sql"]
         }
 
 # NEW: Function to load dashboard and execute all visualization queries
@@ -760,22 +732,6 @@ if st.session_state.current_page == "generate":
         # Add visualization section
         st.subheader("✨ Add New Visualization")
         
-        # Query suggestions
-        suggestions = [
-            "Show delayed flights by airport",
-            "Sales revenue by region as bar chart",
-            "Airline distribution pie chart",
-            "Revenue trend over time",
-            "Top 10 products by sales"
-        ]
-
-        st.write("💡 **Quick suggestions:**")
-        cols = st.columns(len(suggestions))
-        for i, suggestion in enumerate(suggestions):
-            with cols[i]:
-                if st.button(suggestion, key=f"suggestion_{i}"):
-                    st.session_state.viz_query = suggestion
-        
         # Query input
         query = st.text_area(
             "Describe your visualization",
@@ -798,8 +754,16 @@ if st.session_state.current_page == "generate":
                         progress.progress(i + 1)
                     
                     # Generate fake visualization config
-                    viz_config = generator.generate_visualization_simple(query)
+                    viz_config = generator.generate_viz_api(query)
+
+                    if "id" not in viz_config or viz_config["id"] is None:
+                        viz_config["id"] = str(uuid.uuid4())
+
+                    print(f"viz_config generated: {viz_config}")
                     viz_with_data = execute_visualization_query(viz_config)
+                    print()
+                    print(f"viz_with_data generated: {viz_with_data}")
+                    print()
                     dashboard['visualizations'].append(viz_with_data)
                     dashboard['metadata']['queries'].append(query)
                     dashboard['metadata']['last_modified'] = datetime.now()
