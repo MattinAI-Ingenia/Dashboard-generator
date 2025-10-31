@@ -456,6 +456,14 @@ def _render_viz_content(viz: Dict[str, Any], show_controls: bool = False):
         """, unsafe_allow_html=True)
         
         # Use st.code for proper SQL syntax highlighting with black text
+        with st.expander("👤 User Query", expanded=False):
+            st.markdown(
+                f'<div style="background: #f8f9fa; padding: 10px; border-radius: 5px; border: 1px solid #dee2e6;">'
+                f'<code style="color: #000000 !important; font-family: monospace; font-size: 12px; background: transparent !important;">{viz["result"]["original_user_query"]}</code>'
+                f'</div>',
+                unsafe_allow_html=True
+            )
+
         with st.expander("📝 SQL Query", expanded=False):
             st.markdown(
                 f'<div style="background: #f8f9fa; padding: 10px; border-radius: 5px; border: 1px solid #dee2e6;">'
@@ -505,6 +513,7 @@ def execute_visualization_query(viz_config: Dict[str, Any]) -> Dict[str, Any]:
             "y_column": y_column,
             "type": viz_config["result"]["chart_type"],  # Map chart_type to type for render function
             "generated_sql": viz_config["result"]["sql"],  # For SQL display
+            "user_query": viz_config.get("user_query", ""),  # Original user query
             "execution_info": {
                 "row_count": query_result.get("row_count", len(df)),
                 "execution_time_ms": query_result.get("execution_time_ms", 0)
