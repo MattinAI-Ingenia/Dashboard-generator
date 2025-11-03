@@ -173,6 +173,39 @@ class DashboardApi:
             st.error(f"Failed to delete dashboard: {str(e)}")
             return False
 
+    def export_dashboard(self, dashboard_id: int) -> Dict[str, Any]:
+        """Export dashboard as JSON"""
+        try:
+            result = self.call_api(
+                f"/dashboards/{dashboard_id}/export?include_data=false", 
+                method="POST"
+            )
+            return result
+        except Exception as e:
+            st.error(f"Failed to export dashboard: {str(e)}")
+            return None
+
+    def import_dashboard(self, import_data: Dict[str, Any], new_name: str = None, 
+                     preserve_ids: bool = False) -> Dict[str, Any]:
+        """Import dashboard from JSON"""
+        request_payload = import_data  # Don't wrap it, send the whole import_data
+        
+        # Add query parameters for new_name and preserve_ids
+        params = []
+        if new_name:
+            params.append(f"new_name={new_name}")
+        if preserve_ids:
+            params.append(f"preserve_ids={preserve_ids}")
+        
+        query_string = "?" + "&".join(params) if params else ""
+        
+        try:
+            result = self.call_api(f"/dashboards/import{query_string}", method="POST", data=request_payload)
+            return result
+        except Exception as e:
+            st.error(f"Failed to import dashboard: {str(e)}")
+            return None
+
     # QUERY
     def execute_query(self, data_source: str, query: str) -> Dict[str, Any]:
         """Execute query via backend API"""

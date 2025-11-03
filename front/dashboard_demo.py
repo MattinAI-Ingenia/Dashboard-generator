@@ -570,8 +570,9 @@ def render_dashboard_summary_with_load(dashboard: Dict[str, Any]):
             print(f"dashboard data, {dashboard}")
             print()
             st.caption(f"📅 Modified: {dashboard['metadata']['last_modified'].strftime('%Y-%m-%d %H:%M')}")
-            st.caption(f"📊 {dashboard['metadata']['visualization_count']} visualizations")
-        
+            viz_count = len(dashboard.get('visualizations', [])) or dashboard['metadata'].get('visualization_count', 0)
+            st.caption(f"📊 {viz_count} visualizations")    
+
         with col2:
             if st.button("👁️ View", key=f"view_{dashboard.get('id', 'temp')}"):
                 with st.spinner("Loading with live data..."):
@@ -894,7 +895,6 @@ elif st.session_state.current_page == "dashboards":
             dashboards = [d for d in dashboards if search.lower() in d['name'].lower()]
         
         # Sort dashboards
-        print(dashboards)
         if sort_by == "Name":
             dashboards.sort(key=lambda x: x['name'])
         elif sort_by == "Created Date":
@@ -912,59 +912,68 @@ elif st.session_state.current_page == "dashboards":
 elif st.session_state.current_page == "import_export":
     st.title("📤 Import/Export")
     
-    tab1, tab2, tab3 = st.tabs(["📤 Export", "📥 Import", "🖼️ Export Images"])
+    tab1, tab2 = st.tabs(["📤 Export", "📥 Import"])
     
     with tab1:
         st.subheader("📤 Export Dashboards")
         
-        if st.session_state.dashboards:
-            dashboard_options = {d['name']: d_id for d_id, d in st.session_state.dashboards.items()}
+        # Load saved dashboards if needed
+        saved_dashboards = [d for d in st.session_state.dashboards.values() if d.get('is_saved')]
+        
+        if not saved_dashboards:
+            if st.button("🔄 Load Dashboards from Database"):
+                with st.spinner("Loading dashboards..."):
+                    saved_dashboards = dash_api.list_saved_dashboards()
+                    for dashboard in saved_dashboards:
+                        st.session_state.dashboards[str(dashboard["id"])] = dashboard
+                    st.rerun()
+            st.info("Click 'Load Dashboards' to see available dashboards for export.")
+        
+        else:
+            dashboard_options = {d['name']: d['id'] for d in saved_dashboards}
             selected_name = st.selectbox("Select dashboard to export", list(dashboard_options.keys()))
             
             if selected_name:
                 selected_id = dashboard_options[selected_name]
-                dashboard = st.session_state.dashboards[selected_id]
+                dashboard = st.session_state.dashboards[str(selected_id)]
+                
+                # Load full dashboard if visualizations are empty
+                if not dashboard.get('visualizations'):
+                    with st.spinner("Loading dashboard details..."):
+                        full_dashboard = dash_api.load_dashboard_from_api(selected_id)
+                        if full_dashboard:
+                            st.session_state.dashboards[str(selected_id)] = full_dashboard
+                            dashboard = full_dashboard
+                
+                # Get viz count
+                viz_count = len(dashboard.get('visualizations', [])) or dashboard['metadata'].get('visualization_count', 0)
                 
                 col1, col2 = st.columns(2)
                 
                 with col1:
-                    include_data = st.checkbox("Include actual data", value=False)
                     format_type = st.selectbox("Export format", ["JSON"])
                 
                 with col2:
                     st.write("**Export Preview:**")
                     preview = {
                         "dashboard_name": dashboard['name'],
-                        "visualizations_count": len(dashboard['visualizations']),
-                        "created_at": dashboard['metadata']['created_at'].isoformat(),
-                        "include_data": include_data
+                        "visualizations_count": viz_count,
+                        "created_at": dashboard['metadata']['created_at'].isoformat()
                     }
                     st.json(preview, expanded=False)
                 
                 if st.button("📤 Generate Export File", type="primary"):
-                    export_data = {
-                        "version": "1.0",
-                        "dashboard": dashboard.copy(),
-                        "exported_at": datetime.now().isoformat(),
-                        "metadata": {
-                            "include_data": include_data,
-                            "export_format": format_type
-                        }
-                    }
+                    export_data = dash_api.export_dashboard(selected_id)
                     
-                    if not include_data:
-                        for viz in export_data["dashboard"]["visualizations"]:
-                            viz["data"] = f"<data_placeholder_for_{viz['type']}>"
-                    
-                    st.download_button(
-                        "💾 Download Export File",
-                        data=json.dumps(export_data, indent=2, default=str),
-                        file_name=f"{dashboard['name']}_export.json",
-                        mime="application/json"
-                    )
-        else:
-            st.info("📋 No dashboards available for export. Create some dashboards first!")
-    
+                    if export_data:
+                        st.download_button(
+                            "💾 Download Export File",
+                            data=json.dumps(export_data, indent=2, default=str),
+                            file_name=f"{dashboard['name']}_export.json",
+                            mime="application/json"
+                        )
+                        st.success("✅ Export ready for download!")
+
     with tab2:
         st.subheader("📥 Import Dashboard")
         
@@ -1041,30 +1050,37 @@ elif st.session_state.current_page == "import_export":
                     
                     if st.button("📥 Import Dashboard", type="primary", disabled=validate_only):
                         try:
-                            dashboard_to_import = import_data["dashboard"].copy()
+                            result = dash_api.import_dashboard(
+                                import_data, 
+                                new_name if new_name else None,
+                                preserve_ids
+                            )
                             
-                            if not preserve_ids:
-                                dashboard_to_import["id"] = str(uuid.uuid4())
-                                for viz in dashboard_to_import["visualizations"]:
-                                    viz["id"] = str(uuid.uuid4())
-                            
-                            if new_name:
-                                dashboard_to_import["name"] = new_name
-                            
-                            dashboard_to_import["metadata"]["last_modified"] = datetime.now()
-                            dashboard_to_import["is_saved"] = False
-                            
-                            # Handle data placeholders
-                            for viz in dashboard_to_import["visualizations"]:
-                                if isinstance(viz.get("data"), str) and "placeholder" in viz["data"]:
-                                    new_viz = generator.generate_visualization_simple("regenerate data")
-                                    viz["data"] = new_viz["data"]
-                            
-                            dashboard_id = dashboard_to_import["id"]
-                            st.session_state.dashboards[dashboard_id] = dashboard_to_import
-                            
-                            st.success(f"✅ Dashboard imported successfully!")
-                            
+                            if result:
+                                # Transform the imported dashboard to match frontend format
+                                imported_dashboard = {
+                                    "id": result["id"],
+                                    "name": result["dashboard_data"]["name"],
+                                    "description": result["dashboard_data"].get("description", ""),
+                                    "visualizations": result["dashboard_data"].get("visualizations", []),
+                                    "layout": result["dashboard_data"].get("layout", {"type": "grid", "responsive": True}),
+                                    "metadata": {
+                                        "created_at": datetime.fromisoformat(result["created_at"].replace("Z", "+00:00")),
+                                        "last_modified": datetime.fromisoformat(result["updated_at"].replace("Z", "+00:00")),
+                                        "queries": [],
+                                        "version": 1,
+                                        "visualization_count": len(result["dashboard_data"].get("visualizations", []))
+                                    },
+                                    "is_saved": True
+                                }
+                                
+                                # Add to session state
+                                st.session_state.dashboards[str(imported_dashboard["id"])] = imported_dashboard
+                                
+                                st.success(f"✅ Dashboard '{imported_dashboard['name']}' imported successfully!")
+                                time.sleep(2)
+                                st.rerun()
+                                
                         except Exception as e:
                             st.error(f"❌ Import failed: {str(e)}")
                     
@@ -1075,60 +1091,6 @@ elif st.session_state.current_page == "import_export":
                 st.error("❌ Invalid JSON file. Please check the file format.")
             except Exception as e:
                 st.error(f"❌ Error reading file: {str(e)}")
-    
-    with tab3:
-        st.subheader("🖼️ Export Visualizations as Images")
-        
-        if st.session_state.dashboards:
-            dashboard_options = {d['name']: d_id for d_id, d in st.session_state.dashboards.items()}
-            selected_dashboard = st.selectbox("Select dashboard", list(dashboard_options.keys()))
-            
-            if selected_dashboard:
-                dashboard_id = dashboard_options[selected_dashboard]
-                dashboard = st.session_state.dashboards[dashboard_id]
-                
-                if dashboard['visualizations']:
-                    viz_options = {f"{viz['title']}": i for i, viz in enumerate(dashboard['visualizations'])}
-                    selected_viz = st.selectbox("Select visualization", list(viz_options.keys()))
-                    
-                    if selected_viz:
-                        viz_index = viz_options[selected_viz]
-                        viz = dashboard['visualizations'][viz_index]
-                        
-                        col1, col2, col3 = st.columns(3)
-                        
-                        with col1:
-                            img_format = st.selectbox("Format", ["PNG", "PDF"])
-                            width = st.number_input("Width (px)", value=800, min_value=100, max_value=4000)
-                        
-                        with col2:
-                            height = st.number_input("Height (px)", value=600, min_value=100, max_value=4000)
-                            dpi = st.number_input("DPI", value=300, min_value=72, max_value=600)
-                        
-                        with col3:
-                            include_title = st.checkbox("Include title", value=True)
-                            transparent_bg = st.checkbox("Transparent background", value=False)
-                        
-                        st.subheader("🖼️ Preview")
-                        render_visualization(viz)
-                        
-                        if st.button("🖼️ Generate Image Export", type="primary"):
-                            with st.spinner("Generating image..."):
-                                time.sleep(2)
-                                
-                            st.success("✅ Image generated successfully!")
-                            st.info(f"📁 Would generate {img_format} file: {width}x{height} at {dpi} DPI")
-                            
-                            st.download_button(
-                                f"💾 Download {img_format}",
-                                data=b"mock_image_data",
-                                file_name=f"{viz['title']}.{img_format.lower()}",
-                                mime=f"image/{img_format.lower()}"
-                            )
-                else:
-                    st.info("Selected dashboard has no visualizations to export.")
-        else:
-            st.info("📋 No dashboards available. Create some dashboards first!")
 
 elif st.session_state.current_page == "data_sources":
     st.title("🔌 Data Sources")

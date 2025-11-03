@@ -3,6 +3,7 @@ from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
 import logging
+import uuid
 from typing import List, Optional, Dict, Any
 from datetime import datetime
 
@@ -189,5 +190,91 @@ def delete_dashboard(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error deleting dashboard: {str(e)}"
+        )
+    
+@router.post("/{dashboard_id}/export", response_model=Dict[str, Any])
+def export_dashboard(
+    dashboard_id: int,
+    db: Session = Depends(get_db)
+):
+    """Export dashboard as JSON."""
+    dashboard = dashboard_repository.get(db, id=dashboard_id)
+    if not dashboard:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Dashboard with ID {dashboard_id} not found"
+        )
+    
+    export_data = {
+        "version": "1.0",
+        "dashboard": dashboard.dashboard_data,
+        "exported_at": datetime.now().isoformat(),
+        "metadata": {
+            "export_format": "JSON"
+        }
+    }
+    
+    return export_data
+
+@router.post("/import", status_code=status.HTTP_201_CREATED, response_model=DashboardResponse)
+def import_dashboard(
+    import_data: Dict[str, Any],
+    new_name: Optional[str] = None,
+    preserve_ids: bool = False,
+    db: Session = Depends(get_db)
+):
+    """Import dashboard from JSON."""
+    try:
+        # Validate structure
+        if "version" not in import_data or "dashboard" not in import_data:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid import file structure"
+            )
+        
+        dashboard_data = import_data["dashboard"]
+        
+        # Validate required fields
+        if "name" not in dashboard_data or "visualizations" not in dashboard_data:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Dashboard missing required fields"
+            )
+        
+        # Clean up - remove fields that don't belong in dashboard_data
+        if "id" in dashboard_data:
+            del dashboard_data["id"]
+        
+        if new_name:
+            dashboard_data["name"] = new_name
+        
+        # Generate new IDs for visualizations if not preserving
+        if not preserve_ids:
+            for viz in dashboard_data.get("visualizations", []):
+                viz["id"] = str(uuid.uuid4())
+        
+        # Create dashboard
+        create_data = {
+            "user_id": 1,  # Update with actual user
+            "dashboard_data": dashboard_data,
+            "created_at": datetime.now(),
+            "updated_at": datetime.now()
+        }
+        
+        dashboard = dashboard_repository.create(
+            db,
+            obj_in=DashboardCreate(**create_data)
+        )
+        
+        logger.info(f"Dashboard imported: {dashboard_data['name']} (ID: {dashboard.id})")
+        return dashboard
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error importing dashboard: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error importing dashboard: {str(e)}"
         )
     
