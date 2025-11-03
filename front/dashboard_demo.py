@@ -1045,15 +1045,11 @@ elif st.session_state.current_page == "import_export":
                                                 value=import_data["dashboard"].get("name", ""))
                         validate_only = st.checkbox("Validate only (don't import)", value=False)
                     
-                    with col2:
-                        preserve_ids = st.checkbox("Preserve original IDs", value=False)
-                    
                     if st.button("📥 Import Dashboard", type="primary", disabled=validate_only):
                         try:
                             result = dash_api.import_dashboard(
                                 import_data, 
-                                new_name if new_name else None,
-                                preserve_ids
+                                new_name if new_name else None
                             )
                             
                             if result:

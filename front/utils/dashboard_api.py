@@ -185,8 +185,7 @@ class DashboardApi:
             st.error(f"Failed to export dashboard: {str(e)}")
             return None
 
-    def import_dashboard(self, import_data: Dict[str, Any], new_name: str = None, 
-                     preserve_ids: bool = False) -> Dict[str, Any]:
+    def import_dashboard(self, import_data: Dict[str, Any], new_name: str = None) -> Dict[str, Any]:
         """Import dashboard from JSON"""
         request_payload = import_data  # Don't wrap it, send the whole import_data
         
@@ -194,8 +193,6 @@ class DashboardApi:
         params = []
         if new_name:
             params.append(f"new_name={new_name}")
-        if preserve_ids:
-            params.append(f"preserve_ids={preserve_ids}")
         
         query_string = "?" + "&".join(params) if params else ""
         

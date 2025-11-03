@@ -220,7 +220,6 @@ def export_dashboard(
 def import_dashboard(
     import_data: Dict[str, Any],
     new_name: Optional[str] = None,
-    preserve_ids: bool = False,
     db: Session = Depends(get_db)
 ):
     """Import dashboard from JSON."""
@@ -247,11 +246,6 @@ def import_dashboard(
         
         if new_name:
             dashboard_data["name"] = new_name
-        
-        # Generate new IDs for visualizations if not preserving
-        if not preserve_ids:
-            for viz in dashboard_data.get("visualizations", []):
-                viz["id"] = str(uuid.uuid4())
         
         # Create dashboard
         create_data = {
