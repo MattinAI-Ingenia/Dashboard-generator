@@ -9,152 +9,14 @@ from typing import Dict, List, Any
 import plotly.express as px
 
 from utils.dashboard_api import DashboardApi
+from utils.style import load_style
 from components.data_sources import manage_data_sources
+from components.import_export import import_export_dashboards  
 
 dash_api = DashboardApi()
 
 # CSS
-st.markdown("""
-<style>
-    /* Hide Streamlit branding */
-    #MainMenu {visibility: hidden;}
-    footer {visibility: hidden;}
-    header {visibility: hidden;}
-    
-    /* Modern variables */
-    :root {
-        --primary: #2563eb;
-        --primary-dark: #1d4ed8;
-        --secondary: #f1f5f9;
-        --accent: #0ea5e9;
-        --success: #10b981;
-        --warning: #f59e0b;
-        --danger: #ef4444;
-        --text: #334155;
-        --text-light: #64748b;
-        --border: #e2e8f0;
-        --bg-card: #F8F8FF;
-    }
-    
-    /* Sidebar styling */
-    .sidebar .sidebar-content {
-        background: linear-gradient(180deg, #1e293b 0%, #334155 100%);
-    }
-    
-    /* Card components */
-    .dashboard-card {
-        background: var(--bg-card);
-        border: 1px solid var(--border);
-        border-radius: 12px;
-        padding: 1.5rem;
-        margin: 1rem 0;
-        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
-        transition: all 0.3s ease;
-    }
-    
-    .dashboard-card:hover {
-        transform: translateY(-2px);
-        box-shadow: 0 10px 25px -3px rgba(0, 0, 0, 0.1);
-        border-color: var(--primary);
-    }
-    
-    /* Button styles */
-    .stExpander > div > div > p {
-        color: #000000 !important;
-    }
-
-    /* Hero section */
-    .hero-section {
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        border-radius: 16px;
-        padding: 3rem 2rem;
-        color: white;
-        text-align: center;
-        margin: 2rem 0;
-    }
-    
-    .hero-title {
-        font-size: 2.5rem;
-        font-weight: 800;
-        margin-bottom: 1rem;
-        text-shadow: 0 2px 4px rgba(0,0,0,0.1);
-    }
-    
-    .hero-subtitle {
-        font-size: 1.2rem;
-        opacity: 0.9;
-        margin-bottom: 0;
-    }
-    
-    /* Status indicators */
-    .status-badge {
-        display: inline-flex;
-        align-items: center;
-        padding: 0.25rem 0.75rem;
-        border-radius: 9999px;
-        font-size: 0.875rem;
-        font-weight: 500;
-    }
-    
-    .status-active {
-        background-color: #dcfce7;
-        color: #166534;
-    }
-    
-    .status-temporary {
-        background-color: #fef3c7;
-        color: #92400e;
-    }
-    
-    /* Action buttons */
-    .action-grid {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-        gap: 1rem;
-        margin: 2rem 0;
-    }
-    
-    .action-card {
-        background: var(--bg-card);
-        border: 2px solid var(--border);
-        border-radius: 12px;
-        padding: 1.5rem;
-        text-align: center;
-        cursor: pointer;
-        transition: all 0.3s ease;
-    }
-    
-    .action-card:hover {
-        border-color: var(--primary);
-        background: #fafbff;
-    }
-    
-    /* Visualization container */
-    .viz-container {
-        background: var(--bg-card);
-        border: 1px solid var(--border);
-        border-radius: 12px;
-        padding: 1.5rem;
-        margin: 1rem 0;
-        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
-    }
-    
-    /* Progress styles */
-    .progress-container {
-        background: var(--secondary);
-        border-radius: 8px;
-        padding: 1rem;
-        margin: 1rem 0;
-    }
-    
-    /* Menu item active state */
-    .menu-item-active {
-        background: var(--primary) !important;
-        color: white !important;
-        font-weight: 600;
-    }
-</style>
-""", unsafe_allow_html=True)
+load_style()
 
 # ===== AUTHENTICATION =====
 def login_page():
@@ -290,10 +152,6 @@ class DashboardGenerator:
             'name': name,
             'description': description,
             'visualizations': [],
-            'layout': {
-                'type': 'grid',
-                'responsive': True
-            },
             'metadata': {
                 'created_at': datetime.now(),
                 'last_modified': datetime.now(),
@@ -326,9 +184,9 @@ def render_visualization(viz: Dict[str, Any], show_controls: bool = False):
         return None
     
     # Check if data is available
-    print()
-    print(f"New Viz, {viz}")
-    print()
+    # print()
+    # print(f"New Viz, {viz}")
+    # print()
     if viz.get('data') is None or viz['data'].empty:
         st.warning("⚠️ No data available for this visualization")
         st.markdown('</div>', unsafe_allow_html=True)
@@ -487,41 +345,47 @@ def _render_viz_content(viz: Dict[str, Any], show_controls: bool = False):
 def execute_visualization_query(viz_config: Dict[str, Any]) -> Dict[str, Any]:
     """Execute the query for a visualization and return it with data for rendering"""
     try:
-        # Execute the query using your API
-        query_result = dash_api.execute_query(
-            data_source=viz_config["result"]["data_source"],
-            query=viz_config["result"]["sql"]
-        )
+        # Check if it's MongoDB (has pipeline in result)
+        result = viz_config.get("result", {})
         print()
-        print(f'query_result: {query_result}')
+        print(f"Executing viz query, {result}")
         print()
+        if "mongodb_query" in result:
+            # MongoDB query - construct proper query format
+            query_result = dash_api.execute_query(
+                data_source=result["data_source"],
+                query=result["mongodb_query"]
+            )
+        else:
+            # SQL query
+            query_result = dash_api.execute_query(
+                data_source=result["data_source"],
+                query=result["sql"]
+            )
+        
         if not query_result or not query_result.get("data"):
             raise Exception("No data returned from query")
         
-        # Convert to DataFrame
         df = pd.DataFrame(query_result["data"])
- 
-        # Use config columns if they exist in the data, otherwise auto-detect
-        x_column = viz_config["result"]["config"].get("x_column")
-        y_column = viz_config["result"]["config"].get("y_column")
+        
+        x_column = result["config"].get("x_column")
+        y_column = result["config"].get("y_column")
 
-        # Return visualization with data for rendering
         return {
-            **viz_config,  # Keep all original config
-            "data": df,    # Add actual data for rendering
+            **viz_config,
+            "data": df,
             "x_column": x_column,
             "y_column": y_column,
-            "type": viz_config["result"]["chart_type"],  # Map chart_type to type for render function
-            "generated_sql": viz_config["result"]["sql"],  # For SQL display
-            "user_query": viz_config.get("user_query", ""),  # Original user query
+            "type": result["chart_type"],
+            "generated_sql": result.get("sql") or json.dumps(result.get("pipeline")),
+            "user_query": result.get("original_user_query", ""),
             "execution_info": {
-                "row_count": query_result.get("row_count", len(df)),
+                "row_count": len(df),
                 "execution_time_ms": query_result.get("execution_time_ms", 0)
             }
         }
         
     except Exception as e:
-        # Return error visualization
         return {
             **viz_config,
             "type": "error",
@@ -782,7 +646,9 @@ if st.session_state.current_page == "generate":
                     
                     # Generate fake visualization config
                     viz_config = dash_api.generate_sql_from_nlp(query)
-
+                    print()
+                    print(f"viz_config generated: {viz_config}")
+                    print()
                     if "id" not in viz_config or viz_config["id"] is None:
                         viz_config["id"] = str(uuid.uuid4())
 
@@ -912,181 +778,7 @@ elif st.session_state.current_page == "dashboards":
 elif st.session_state.current_page == "import_export":
     st.title("📤 Import/Export")
     
-    tab1, tab2 = st.tabs(["📤 Export", "📥 Import"])
-    
-    with tab1:
-        st.subheader("📤 Export Dashboards")
-        
-        # Load saved dashboards if needed
-        saved_dashboards = [d for d in st.session_state.dashboards.values() if d.get('is_saved')]
-        
-        if not saved_dashboards:
-            if st.button("🔄 Load Dashboards from Database"):
-                with st.spinner("Loading dashboards..."):
-                    saved_dashboards = dash_api.list_saved_dashboards()
-                    for dashboard in saved_dashboards:
-                        st.session_state.dashboards[str(dashboard["id"])] = dashboard
-                    st.rerun()
-            st.info("Click 'Load Dashboards' to see available dashboards for export.")
-        
-        else:
-            dashboard_options = {d['name']: d['id'] for d in saved_dashboards}
-            selected_name = st.selectbox("Select dashboard to export", list(dashboard_options.keys()))
-            
-            if selected_name:
-                selected_id = dashboard_options[selected_name]
-                dashboard = st.session_state.dashboards[str(selected_id)]
-                
-                # Load full dashboard if visualizations are empty
-                if not dashboard.get('visualizations'):
-                    with st.spinner("Loading dashboard details..."):
-                        full_dashboard = dash_api.load_dashboard_from_api(selected_id)
-                        if full_dashboard:
-                            st.session_state.dashboards[str(selected_id)] = full_dashboard
-                            dashboard = full_dashboard
-                
-                # Get viz count
-                viz_count = len(dashboard.get('visualizations', [])) or dashboard['metadata'].get('visualization_count', 0)
-                
-                col1, col2 = st.columns(2)
-                
-                with col1:
-                    format_type = st.selectbox("Export format", ["JSON"])
-                
-                with col2:
-                    st.write("**Export Preview:**")
-                    preview = {
-                        "dashboard_name": dashboard['name'],
-                        "visualizations_count": viz_count,
-                        "created_at": dashboard['metadata']['created_at'].isoformat()
-                    }
-                    st.json(preview, expanded=False)
-                
-                if st.button("📤 Generate Export File", type="primary"):
-                    export_data = dash_api.export_dashboard(selected_id)
-                    
-                    if export_data:
-                        st.download_button(
-                            "💾 Download Export File",
-                            data=json.dumps(export_data, indent=2, default=str),
-                            file_name=f"{dashboard['name']}_export.json",
-                            mime="application/json"
-                        )
-                        st.success("✅ Export ready for download!")
-
-    with tab2:
-        st.subheader("📥 Import Dashboard")
-        
-        uploaded_file = st.file_uploader("Choose a dashboard JSON file", type=['json'])
-        
-        if uploaded_file is not None:
-            try:
-                file_content = uploaded_file.read()
-                import_data = json.loads(file_content)
-                
-                # Validation
-                col1, col2 = st.columns(2)
-                
-                with col1:
-                    st.subheader("📋 Validation Results")
-                    
-                    is_valid = True
-                    errors = []
-                    warnings = []
-                    
-                    if "version" not in import_data:
-                        errors.append("Missing version field")
-                        is_valid = False
-                    
-                    if "dashboard" not in import_data:
-                        errors.append("Missing dashboard data")
-                        is_valid = False
-                    else:
-                        dashboard_data = import_data["dashboard"]
-                        if "name" not in dashboard_data:
-                            errors.append("Dashboard missing name")
-                            is_valid = False
-                        if "visualizations" not in dashboard_data:
-                            errors.append("Dashboard missing visualizations")
-                            is_valid = False
-                    
-                    if import_data.get("version") != "1.0":
-                        warnings.append(f"Version {import_data.get('version')} may not be compatible")
-                    
-                    if is_valid:
-                        st.success("✅ File is valid for import")
-                    else:
-                        st.error("❌ File validation failed")
-                        for error in errors:
-                            st.error(f"• {error}")
-                    
-                    if warnings:
-                        for warning in warnings:
-                            st.warning(f"⚠️ {warning}")
-                
-                with col2:
-                    st.subheader("📄 Import Preview")
-                    if "dashboard" in import_data:
-                        preview = {
-                            "name": import_data["dashboard"].get("name", "Unknown"),
-                            "description": import_data["dashboard"].get("description", "No description"),
-                            "visualizations": len(import_data["dashboard"].get("visualizations", [])),
-                            "export_date": import_data.get("exported_at", "Unknown")
-                        }
-                        st.json(preview)
-                
-                if is_valid:
-                    st.subheader("📥 Import Options")
-                    
-                    col1, col2 = st.columns(2)
-                    
-                    with col1:
-                        new_name = st.text_input("Dashboard name (optional)", 
-                                                value=import_data["dashboard"].get("name", ""))
-                        validate_only = st.checkbox("Validate only (don't import)", value=False)
-                    
-                    if st.button("📥 Import Dashboard", type="primary", disabled=validate_only):
-                        try:
-                            result = dash_api.import_dashboard(
-                                import_data, 
-                                new_name if new_name else None
-                            )
-                            
-                            if result:
-                                # Transform the imported dashboard to match frontend format
-                                imported_dashboard = {
-                                    "id": result["id"],
-                                    "name": result["dashboard_data"]["name"],
-                                    "description": result["dashboard_data"].get("description", ""),
-                                    "visualizations": result["dashboard_data"].get("visualizations", []),
-                                    "layout": result["dashboard_data"].get("layout", {"type": "grid", "responsive": True}),
-                                    "metadata": {
-                                        "created_at": datetime.fromisoformat(result["created_at"].replace("Z", "+00:00")),
-                                        "last_modified": datetime.fromisoformat(result["updated_at"].replace("Z", "+00:00")),
-                                        "queries": [],
-                                        "version": 1,
-                                        "visualization_count": len(result["dashboard_data"].get("visualizations", []))
-                                    },
-                                    "is_saved": True
-                                }
-                                
-                                # Add to session state
-                                st.session_state.dashboards[str(imported_dashboard["id"])] = imported_dashboard
-                                
-                                st.success(f"✅ Dashboard '{imported_dashboard['name']}' imported successfully!")
-                                time.sleep(2)
-                                st.rerun()
-                                
-                        except Exception as e:
-                            st.error(f"❌ Import failed: {str(e)}")
-                    
-                    elif validate_only:
-                        st.info("✅ Validation complete. File is ready for import.")
-            
-            except json.JSONDecodeError:
-                st.error("❌ Invalid JSON file. Please check the file format.")
-            except Exception as e:
-                st.error(f"❌ Error reading file: {str(e)}")
+    import_export_dashboards()
 
 elif st.session_state.current_page == "data_sources":
     st.title("🔌 Data Sources")
