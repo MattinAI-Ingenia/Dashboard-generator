@@ -34,9 +34,18 @@ class SQLGenerationResult(BaseModel):
     chart_type: Optional[str] = None
     config: Optional[Dict[str, Any]] = None
 
+class MongodbGenerationResult(BaseModel):
+    mongodb_query: str
+    title: str
+    description: str
+    data_source: str
+    original_user_query: str
+    chart_type: Optional[str] = None
+    config: Optional[Dict[str, Any]] = None
+
 class NLPQueryResponse(BaseModel):
     success: bool
-    result: Optional[SQLGenerationResult] = None
+    result: Optional[Any] = None
     error: Optional[str] = None
 
 def get_ai_client() -> AICoreClient:
@@ -135,23 +144,47 @@ Select the most appropriate datasource for a user query.
         # Step 4: Call AI service to generate SQL
         # logger.info(f"Generating SQL for datasource: {schema}")
 
-        prompt_message = f"""
-Generate a SQL query for resolving the user query.
+        database_type = selected_datasource_details.type
 
-### AVAILABLE DATASOURCE:
-{json.dumps(schema)}
+        if database_type.lower() == "postgresql":
 
-### USER QUERY:
-{request.query}
-"""
+            prompt_message = f"""
+    Generate a SQL query for resolving the user query.
 
-        logger.info(f"Prompt message for SQL generation: {prompt_message}")
+    ### AVAILABLE DATASOURCE:
+    {json.dumps(schema)}
 
-        generated_sql = await ai_client.chat(
-            message=prompt_message,
-            app_id=1,
-            agent_id=1
-        )
+    ### USER QUERY:
+    {request.query}
+    """
+
+            logger.info(f"Prompt message for SQL generation: {prompt_message}")
+
+            generated_sql = await ai_client.chat(
+                message=prompt_message,
+                app_id=1,
+                agent_id=1
+            )
+
+        elif database_type.lower() == "mongodb":
+
+            prompt_message = f"""
+    Generate a MongoDB query for resolving the user query.
+    
+    ### AVAILABLE DATASOURCE:
+    {json.dumps(schema)}
+
+    ### USER QUERY:
+    {request.query}
+    """
+
+            logger.info(f"Prompt message for MongoDB query generation: {prompt_message}")
+
+            generated_sql = await ai_client.chat(
+                message=prompt_message,
+                app_id=1,
+                agent_id=5
+            )
 
         if not generated_sql:
             return NLPQueryResponse(
@@ -161,45 +194,50 @@ Generate a SQL query for resolving the user query.
             )
         
         generated_sql = generated_sql.get("response", "{}")
-
+        logger.info(f"Generated SQL/MongoDB query: {generated_sql}")
         try:
             parsed_generated_sql = json.loads(generated_sql)
         except json.JSONDecodeError:
             raise ValueError("AI response is not valid JSON")
 
         logger.info(f"Parsed generated SQL response: {parsed_generated_sql}")
-
-        # # Step 5: Validate with AI service
-        # try:
-        #     is_valid = await ai_client.validate_query(
-        #         sql_query=generated_sql,
-        #         schema=schema
-        #     )
-        # except httpx.HTTPError as e:
-        #     logger.warning(f"Validation service error: {str(e)}, skipping validation")
-        #     is_valid = True  # Proceed if validation service is down
         
-        # if not is_valid:
-        #     logger.warning(f"Generated SQL failed validation: {generated_sql}")
-        #     return NLPQueryResponse(
-        #         success=False,
-        #         error="Generated query failed validation",
-        #         suggestions=["Try a simpler query", "Check table and column names"]
-        #     )
-        
-        # Return successful result
-        return NLPQueryResponse(
-            success=True,
-            result=SQLGenerationResult(
-                sql=parsed_generated_sql.get("query", ""),
-                original_user_query=request.query,
-                title=parsed_metadata.get("title", ""),
-                description=parsed_metadata.get("description", ""),
-                data_source=database_name,
-                chart_type=parsed_metadata.get("chart_type"),
-                config= {"x_column": parsed_generated_sql.get("x_column"), "y_column": parsed_generated_sql.get("y_column")}
+        if database_type.lower() == "mongodb":
+            # Return MongoDB result
+            return NLPQueryResponse(
+                success=True,
+                result=MongodbGenerationResult(
+                    mongodb_query=json.dumps({
+                        "collection": parsed_generated_sql.get("collection"),
+                        "operation": "aggregate",
+                        "pipeline": parsed_generated_sql.get("pipeline", [])
+                    }),
+                    original_user_query=request.query,
+                    title=parsed_metadata.get("title", ""),
+                    description=parsed_metadata.get("description", ""),
+                    data_source=database_name,
+                    chart_type=parsed_metadata.get("chart_type"),
+                    config={
+                        "x_column": parsed_generated_sql.get("x_column"), 
+                        "y_column": parsed_generated_sql.get("y_column")
+                    }
+                )
             )
-        )
+        
+        elif database_type.lower() == "postgresql":
+            # Return successful result
+            return NLPQueryResponse(
+                success=True,
+                result=SQLGenerationResult(
+                    sql=parsed_generated_sql.get("query", ""),
+                    original_user_query=request.query,
+                    title=parsed_metadata.get("title", ""),
+                    description=parsed_metadata.get("description", ""),
+                    data_source=database_name,
+                    chart_type=parsed_metadata.get("chart_type"),
+                    config= {"x_column": parsed_generated_sql.get("x_column"), "y_column": parsed_generated_sql.get("y_column")}
+                )
+            )
     
     except HTTPException:
         raise

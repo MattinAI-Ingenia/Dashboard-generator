@@ -32,7 +32,7 @@ def execute_query(
     Used by frontend for data preview and dashboard rendering.
     """
     start_time = time.time()
-    
+    logging.info(f"Executing query: {request}")
     try:
         # Validate data source exists
         data_source = data_source_repository.get_by_name(db, name=request.data_source)
