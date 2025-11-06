@@ -29,12 +29,13 @@ def list_dashboards(
     search: Optional[str] = Query(None),
     sort: str = Query("updated_at", enum=["name", "created_at", "updated_at"]),
     order: str = Query("desc", enum=["asc", "desc"]),
+    user_id: str = Query(...),
     db: Session = Depends(get_db)
 ):
     try:
         skip = (page - 1) * limit
         
-        filters = {}
+        filters = {"user_id": user_id}
         if search:
             filters["search"] = search
         

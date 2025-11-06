@@ -16,6 +16,7 @@ class DataSourceRepository(BaseRepository[DataSource, DataSourceCreate, DataSour
     def get_multi_filtered(
         self, 
         db: Session, 
+        user_id: int,
         *, 
         skip: int = 0, 
         limit: int = 100,
@@ -23,7 +24,9 @@ class DataSourceRepository(BaseRepository[DataSource, DataSourceCreate, DataSour
         types: Optional[List[str]] = None
     ) -> List[DataSource]:
         query = db.query(DataSource)
-        
+
+        query = query.filter(DataSource.user_id == user_id)
+
         if status:
             query = query.filter(DataSource.status == status)
         

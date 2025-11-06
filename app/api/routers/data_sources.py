@@ -27,6 +27,7 @@ logger = logging.getLogger(__name__)
 def list_data_sources(
     status: Optional[str] = Query("active", enum=["all", "active", "inactive", "error"]),
     type: Optional[str] = Query(None, enum=["sql", "nosql"]),
+    user_id: str = Query(...),
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=1000),
     db: Session = Depends(get_db)
@@ -41,7 +42,7 @@ def list_data_sources(
     """
     try:
         # Apply filters
-        filters = {}
+        filters = {"user_id": user_id}
         if status != "all":
             filters["status"] = status
         if type:
@@ -70,7 +71,8 @@ def list_data_sources(
 @router.post("/", status_code=status.HTTP_201_CREATED, response_model=DataSourceResponse)
 async def add_data_source(
     data_source_config: DataSourceConfig,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    user_id: int = Query(...)
 ):
     """
     Connect new data source to the system.
@@ -99,7 +101,7 @@ async def add_data_source(
         
         # Prepare data source creation data
         create_data = {
-            "user_id": 1,  # Placeholder
+            "user_id": user_id,
             "name": data_source_config.name,
             "description": data_source_config.description,
             "type": data_source_config.type.value,
