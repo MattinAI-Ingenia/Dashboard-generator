@@ -152,6 +152,10 @@ class DashboardGenerator:
             'name': name,
             'description': description,
             'visualizations': [],
+            'metadata': {
+                'created_at': datetime.now(),
+                'last_modified': datetime.now()
+            },
             'is_saved': False
         }
 
