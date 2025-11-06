@@ -101,63 +101,70 @@ class QueryExecutorService:
     def execute_mongodb(
         self, 
         statement: str, 
-        parameters: Dict[str, Any], 
         limit: int = 1000
     ) -> List[Dict[str, Any]]:
         """Execute MongoDB query and return results"""
         try:
+            logging.info(f"Executing MongoDB query: {statement}")
             # Parse MongoDB query (expecting JSON-like syntax)
-            query_dict = self._parse_mongodb_query(statement, parameters)
+            query_dict = json.loads(statement)
             
-            # Use connector's MongoDB connection logic
             connection_info = self.data_source.connection_info
-            connection_string = (
-                connection_info.get("connection_string") or
-                f"mongodb://{connection_info.get('host', 'localhost')}:"
-                f"{connection_info.get('port', 27017)}"
+            username = connection_info.get('username')
+            password = connection_info.get('password')
+            host = connection_info.get('host', 'localhost')
+            port = connection_info.get('port', 27017)
+            database = connection_info.get('database')
+
+            if connection_info.get("connection_string"):
+                connection_string = connection_info["connection_string"]
+            elif username and password:
+                connection_string = f"mongodb://{username}:{password}@{host}:{port}/{database}"
+            else:
+                connection_string = f"mongodb://{host}:{port}"
+
+            client = pymongo.MongoClient(
+                connection_string,
+                serverSelectionTimeoutMS=30000,
+                socketTimeoutMS=300000
             )
             
-            client = pymongo.MongoClient(connection_string, serverSelectionTimeoutMS=30000)
+            db = client[connection_info.get('database')]
             
-            with self._timeout_handler():
-                db = client[connection_info.get('database')]
+            # Execute query based on operation type
+            if 'collection' not in query_dict:
+                raise ValueError("MongoDB query must specify a collection")
+            
+            collection = db[query_dict['collection']]
+            operation = query_dict.get('operation', 'find')
+            
+            if operation == 'find':
+                cursor = collection.find(
+                    query_dict.get('filter', {}),
+                    query_dict.get('projection')
+                )
                 
-                # Execute query based on operation type
-                if 'collection' not in query_dict:
-                    raise ValueError("MongoDB query must specify a collection")
+                if 'sort' in query_dict:
+                    cursor = cursor.sort(query_dict['sort'])
                 
-                collection = db[query_dict['collection']]
-                operation = query_dict.get('operation', 'find')
+                cursor = cursor.limit(limit)
+                results = list(cursor)
+            
+            elif operation == 'aggregate':
+                pipeline = query_dict.get('pipeline', [])
+                # Add limit stage if not present in pipeline
+                if not any('$limit' in stage for stage in pipeline):
+                    pipeline.append({'$limit': limit})
                 
-                if operation == 'find':
-                    cursor = collection.find(
-                        query_dict.get('filter', {}),
-                        query_dict.get('projection')
-                    )
-                    
-                    if 'sort' in query_dict:
-                        cursor = cursor.sort(query_dict['sort'])
-                    
-                    cursor = cursor.limit(limit)
-                    results = list(cursor)
-                
-                elif operation == 'aggregate':
-                    pipeline = query_dict.get('pipeline', [])
-                    # Add limit stage if not present in pipeline
-                    if not any('$limit' in stage for stage in pipeline):
-                        pipeline.append({'$limit': limit})
-                    
-                    cursor = collection.aggregate(pipeline)
-                    results = list(cursor)
-                
-                else:
-                    raise ValueError(f"Unsupported MongoDB operation: {operation}")
-                
-                # Convert ObjectId and other MongoDB types to JSON serializable
-                return [self._serialize_mongodb_document(doc) for doc in results]
+                cursor = collection.aggregate(pipeline)
+                results = list(cursor)
+            
+            else:
+                raise ValueError(f"Unsupported MongoDB operation: {operation}")
+            
+            # Convert ObjectId and other MongoDB types to JSON serializable
+            return [self._serialize_mongodb_document(doc) for doc in results]
         
-        except QueryTimeoutError:
-            raise
         except PyMongoError as e:
             logger.error(f"MongoDB execution error: {str(e)}")
             raise ValueError(f"MongoDB execution failed: {str(e)}")
