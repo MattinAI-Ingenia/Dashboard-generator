@@ -4,6 +4,7 @@ import numpy as np
 from datetime import datetime, timedelta
 from typing import Dict, List, Any
 import requests
+import json
 
 
 class DashboardApi:
@@ -132,10 +133,10 @@ class DashboardApi:
             st.error(f"Failed to load dashboard: {str(e)}")
             return None
 
-    def list_saved_dashboards(self) -> List[Dict[str, Any]]:
+    def list_saved_dashboards(self, user_id: int) -> List[Dict[str, Any]]:
         """Get list of saved dashboards from API"""
         try:
-            result = self.call_api("/dashboards/")
+            result = self.call_api(F"/dashboards/?user_id={user_id}")
             print()
             print(f"Resultado de call_api, {result}")
             print()
@@ -204,16 +205,19 @@ class DashboardApi:
             return None
 
     # QUERY
-    def execute_query(self, data_source: str, query: str) -> Dict[str, Any]:
+    def execute_query(self, data_source: str, query: str, type: str) -> Dict[str, Any]:
         """Execute query via backend API"""
         request_payload = {
             "data_source": data_source,
             "query": {
-                "type": "sql",
+                "type": type,
                 "statement": query
             }
         }
         try:
+            print()
+            print(f"Executing query with payload: {request_payload}")
+            print()
             result = self.call_api("/queries/execute", method="POST", data=request_payload)
             return result
         except Exception as e:

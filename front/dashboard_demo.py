@@ -127,11 +127,11 @@ st.set_page_config(
 def init_session_state():
     if 'dashboards' not in st.session_state:
         st.session_state.dashboards = {}
-
-        # Load saved dashboards from API on initialization
-        saved_dashboards = dash_api.list_saved_dashboards()
-        for dashboard in saved_dashboards:
-            st.session_state.dashboards[str(dashboard["id"])] = dashboard
+        if st.session_state.get('user_id'):
+            # Load saved dashboards from API on initialization
+            saved_dashboards = dash_api.list_saved_dashboards(user_id=st.session_state.user_id)
+            for dashboard in saved_dashboards:
+                st.session_state.dashboards[str(dashboard["id"])] = dashboard
     if 'current_dashboard' not in st.session_state:
         st.session_state.current_dashboard = None
     if 'current_page' not in st.session_state:
@@ -152,12 +152,6 @@ class DashboardGenerator:
             'name': name,
             'description': description,
             'visualizations': [],
-            'metadata': {
-                'created_at': datetime.now(),
-                'last_modified': datetime.now(),
-                'queries': [],
-                'version': 1
-            },
             'is_saved': False
         }
 
@@ -354,13 +348,15 @@ def execute_visualization_query(viz_config: Dict[str, Any]) -> Dict[str, Any]:
             # MongoDB query - construct proper query format
             query_result = dash_api.execute_query(
                 data_source=result["data_source"],
-                query=result["mongodb_query"]
+                query=result["mongodb_query"], 
+                type="mongodb"
             )
         else:
             # SQL query
             query_result = dash_api.execute_query(
                 data_source=result["data_source"],
-                query=result["sql"]
+                query=result["sql"],
+                type="sql"
             )
         
         if not query_result or not query_result.get("data"):
@@ -550,7 +546,7 @@ with st.sidebar:
                     result = dash_api.save_dashboard_to_api(dashboard)
                     if result:
                         # Refresh dashboards from API after saving
-                        saved_dashboards = dash_api.list_saved_dashboards()
+                        saved_dashboards = dash_api.list_saved_dashboards(user_id=st.session_state.user_id)
                         
                         # Update session state with fresh data
                         for fresh_dashboard in saved_dashboards:
@@ -706,7 +702,7 @@ elif st.session_state.current_page == "dashboards":
     # Refresh dashboards from API
     if st.button("🔄 Refresh from Database"):
         with st.spinner("Loading dashboards from database..."):
-            saved_dashboards = dash_api.list_saved_dashboards()
+            saved_dashboards = dash_api.list_saved_dashboards(user_id=st.session_state.user_id)
             
             # Clear all saved dashboards and reload
             st.session_state.dashboards = {
@@ -783,4 +779,4 @@ elif st.session_state.current_page == "import_export":
 elif st.session_state.current_page == "data_sources":
     st.title("🔌 Data Sources")
     
-    manage_data_sources()
+    manage_data_sources(st.session_state.user_id)

@@ -1,10 +1,11 @@
 import streamlit as st
+import time 
 
 from utils.dashboard_api import DashboardApi
 
 dash_api = DashboardApi()
 
-def manage_data_sources():
+def manage_data_sources(user_id: int):
     """Manage data sources: list, add, test, delete"""
 
     # Tabs for different data source operations
@@ -12,7 +13,7 @@ def manage_data_sources():
     
     with tab1:
         # Fetch data sources from API
-        data_sources = dash_api.call_api("/data-sources/")
+        data_sources = dash_api.call_api(f"/data-sources/?user_id={user_id}")
         
         if data_sources:
             for ds in data_sources:
@@ -101,10 +102,11 @@ def manage_data_sources():
                 }
                 
                 with st.spinner("Testing connection and adding data source..."):
-                    result = dash_api.call_api("/data-sources/", method="POST", data=config)
-                    
+                    result = dash_api.call_api(f"/data-sources/?user_id={user_id}", method="POST", data=config)
+
                 if result:
                     st.success(f"Data source '{name}' added successfully!")
+                    time.sleep(2)
                     st.rerun()
             elif submitted:
                 st.error("Please fill in required fields (Name and Database)")
@@ -112,7 +114,7 @@ def manage_data_sources():
     with tab3:
         st.subheader("🧪 Test Connections")
         
-        data_sources = dash_api.call_api("/data-sources/")
+        data_sources = dash_api.call_api(f"/data-sources/?user_id={user_id}")
         
         if data_sources:
             for ds in data_sources:
