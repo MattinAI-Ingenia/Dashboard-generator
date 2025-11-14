@@ -66,13 +66,12 @@ class AICoreClient:
         """
         payload = {"message": message}
         logger.info(f"Preparing chat request for agent_id={agent_id}, app_id={app_id}")
-        # logger.info(f"Payload: {payload}")
 
         try:
             response = await self.client.post(f"/public/v1/app/{app_id}/chat/{agent_id}/call", json=payload)
             response.raise_for_status()
             data = response.json()
-            # logger.info("Received chat response from AI service.")
+            logger.info("Received chat response from AI service.")
             return data
             
         except httpx.HTTPStatusError as e:
@@ -104,6 +103,7 @@ class AICoreClient:
         Raises:
             httpx.HTTPError: If request fails
         """
+        print('ENTRA AQUI 2')
         payload = SQLGenerationRequest(
             prompt=prompt,
             schema=schema,

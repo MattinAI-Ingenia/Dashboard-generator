@@ -149,34 +149,35 @@ Select the most appropriate datasource for a user query.
         if database_type.lower() == "postgresql":
 
             prompt_message = f"""
-    Generate a SQL query for resolving the user query.
+            Generate a SQL query for resolving the user query.
 
-    ### AVAILABLE DATASOURCE:
-    {json.dumps(schema)}
+            ### AVAILABLE DATASOURCE:
+            {json.dumps(schema)}
 
-    ### USER QUERY:
-    {request.query}
-    """
+            ### USER QUERY:
+            {request.query}
+            """
 
             logger.info(f"Prompt message for SQL generation: {prompt_message}")
 
             generated_sql = await ai_client.chat(
                 message=prompt_message,
                 app_id=1,
-                agent_id=1
+                agent_id=10
             )
+            logger.info(f"Prompt message for AGENT 10 query generation: {generated_sql}")
 
         elif database_type.lower() == "mongodb":
 
             prompt_message = f"""
-    Generate a MongoDB query for resolving the user query.
-    
-    ### AVAILABLE DATASOURCE:
-    {json.dumps(schema)}
+            Generate a MongoDB query for resolving the user query.
+            
+            ### AVAILABLE DATASOURCE:
+            {json.dumps(schema)}
 
-    ### USER QUERY:
-    {request.query}
-    """
+            ### USER QUERY:
+            {request.query}
+            """
 
             logger.info(f"Prompt message for MongoDB query generation: {prompt_message}")
 
@@ -185,6 +186,7 @@ Select the most appropriate datasource for a user query.
                 app_id=1,
                 agent_id=5
             )
+
 
         if not generated_sql:
             return NLPQueryResponse(
