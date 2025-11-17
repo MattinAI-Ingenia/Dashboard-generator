@@ -5,6 +5,7 @@ from pydantic import BaseModel, Field
 from typing import Optional, Dict, Any, List
 import logging
 import json
+import datetime
 
 from core.database import get_db
 from services.ai_core_client.ai_core_client import get_ai_client, AICoreClient
@@ -31,6 +32,7 @@ class SQLGenerationResult(BaseModel):
     description: str
     data_source: str
     original_user_query: str
+    edit_history: List[Dict[str, Any]] = []
     chart_type: Optional[str] = None
     query_config: Optional[Dict[str, Any]] = None
     config: Optional[Dict[str, Any]] = None
@@ -41,6 +43,7 @@ class MongodbGenerationResult(BaseModel):
     description: str
     data_source: str
     original_user_query: str
+    edit_history: List[Dict[str, Any]] = []
     chart_type: Optional[str] = None
     query_config: Optional[Dict[str, Any]] = None
     config: Optional[Dict[str, Any]] = None
@@ -265,3 +268,140 @@ async def generate_query_from_nlp(
     """Wrapper function to generate query from NLP request"""
 
     return await generate_sql_from_nlp(request, db, ai_client)
+
+@router.post("/query/edit", response_model=NLPQueryResponse)
+async def edit_visualization_query(
+    request: dict,  # Contains: original_viz, edit_instructions
+    db: Session = Depends(get_db),
+    ai_client: AICoreClient = Depends(get_ai_client)
+):
+    """Edit existing visualization based on natural language instructions"""
+    try:
+        original_viz = request.get("original_visualization")
+        edit_instructions = request.get("edit_instructions")
+        logger.info(f"original viz: {original_viz} \n")
+        logger.info(f"edit instructions: {edit_instructions} \n")
+
+        # Get datasource
+        datasource = data_source_repository.get_by_name(
+            db, name=original_viz["data_source"]
+        )
+        
+        if not datasource:
+            raise HTTPException(404, "Datasource not found")
+        
+        database_type = datasource.type.lower()
+        schema = datasource.schema_data or {}
+        edit_history = original_viz.get("edit_history", [])
+
+        logger.info(f"edit_history: {edit_history} \n")
+        logger.info(f"database: {database_type} \n")
+        logger.info(f"schema: {schema} \n")
+
+        # Build context prompt
+        if database_type == "mongodb":
+            original_query = original_viz.get("mongodb_query", "")
+        else:
+            original_query = original_viz.get("sql", "")
+        
+        history_context = "\n".join([
+            f"Edit {i+1}: {edit['instruction']}"
+            for i, edit in enumerate(edit_history)
+        ])
+
+        original_user_query = original_viz.get("original_user_query")
+
+        prompt = f"""
+Modify the existing visualization based on user instructions. Some filed may not need to be changed.
+
+### ORIGINAL VISUALIZATION:
+- Title: {original_viz['title']}
+- Chart Type: {original_viz['chart_type']}
+- Data Source: {original_viz['data_source']}
+- Original User Query: {original_user_query}
+- Original Database Query: {original_query}
+- X Column: {original_viz['query_config']['x_column']}
+- Y Column: {original_viz['query_config']['y_column']}
+
+### EDIT HISTORY:
+{history_context if history_context else "No previous edits"}
+
+### DATABASE SCHEMA:
+{json.dumps(schema)}
+
+### USER EDIT INSTRUCTIONS:
+{edit_instructions}
+
+Generate the updated query maintaining the same output structure.
+"""
+        
+        # Call appropriate agent
+        agent_id = 5 if database_type == "mongodb" else 10
+        generated = await ai_client.chat(message=prompt, app_id=1, agent_id=agent_id)
+        parsed = json.loads(generated.get("response", "{}"))
+        logger.info(f"generated edited query: {parsed}")
+
+        # Get metadata
+        metadata_response = await ai_client.chat(
+            message=f"### ORIGINAL USER QUERY:\n{original_query}\n\n ### HOW TO EDIT ORIGINAL USER QUERY:\n{edit_instructions}",
+            agent_id=3,
+            app_id=1
+        )
+        parsed_metadata = json.loads(metadata_response.get("response", "{}"))
+        logger.info(f"parsed metadata: {parsed_metadata}")
+
+        # Append to edit history
+        new_edit = {
+            "instruction": edit_instructions,
+            "query_snapshot": parsed.get("query") if database_type != "mongodb" else json.dumps({
+                "collection": parsed.get("collection"),
+                "operation":  parsed.get("operation"),
+                "pipeline": parsed.get("pipeline", [])
+            })
+        }
+        edit_history.append(new_edit)
+
+        # Return result
+        if database_type == "mongodb":
+            return NLPQueryResponse(
+                success=True,
+                result=MongodbGenerationResult(
+                    mongodb_query=json.dumps({
+                        "collection": parsed.get("collection"),
+                        "operation": parsed.get("operation"),
+                        "pipeline": parsed.get("pipeline", [])
+                    }),
+                    original_user_query=original_user_query,
+                    title=parsed_metadata.get("title", original_viz['title']),
+                    description=parsed_metadata.get("description", ""),
+                    data_source=original_viz["data_source"],
+                    chart_type=parsed_metadata.get("chart_type", original_viz['chart_type']),
+                    config=parsed_metadata.get("config", original_viz.get('config', {})),
+                    query_config={
+                        "x_column": parsed.get("x_column"),
+                        "y_column": parsed.get("y_column")
+                    }, 
+                    edit_history=edit_history
+                )
+            )
+        else:
+            return NLPQueryResponse(
+                success=True,
+                result=SQLGenerationResult(
+                    sql=parsed.get("query", ""),
+                    original_user_query=original_user_query,
+                    title=parsed_metadata.get("title", original_viz['title']),
+                    description=parsed_metadata.get("description", ""),
+                    data_source=original_viz["data_source"],
+                    chart_type=parsed_metadata.get("chart_type", original_viz['chart_type']),
+                    query_config={
+                        "x_column": parsed.get("x_column"),
+                        "y_column": parsed.get("y_column")
+                    },
+                    config=parsed_metadata.get("config", original_viz.get('config', {})),
+                    edit_history=edit_history
+                )
+            )
+    except Exception as e:
+        logger.error(f"Edit error: {str(e)}", exc_info=True)
+        raise HTTPException(500, f"Edit failed: {str(e)}")

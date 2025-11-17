@@ -330,7 +330,7 @@ def _render_viz_content(viz: Dict[str, Any], show_controls: bool = False):
         """, unsafe_allow_html=True)
         
         # Use st.code for proper SQL syntax highlighting with black text
-        with st.expander("👤 User Query", expanded=False):
+        with st.expander("👤Original User Query", expanded=False):
             user_query = viz["result"]["original_user_query"]
 
             st.markdown(
@@ -348,6 +348,15 @@ def _render_viz_content(viz: Dict[str, Any], show_controls: bool = False):
                 ''',
                 unsafe_allow_html=True
             )
+
+        with st.expander("📝 Edit History", expanded=False):
+            edit_history = viz.get('result', {}).get('edit_history', [])
+            if edit_history:
+                for i, edit in enumerate(edit_history):
+                    st.markdown(f"**Edit {i+1}**")
+                    st.caption(edit['instruction'])
+            else:
+                st.caption("No edits yet")
 
         with st.expander("📝 Generated Query", expanded=False):
             # Get the SQL string (from list if needed)
@@ -782,7 +791,9 @@ if st.session_state.current_page == "generate":
         
         if st.session_state.editing_viz_id:
             editing_viz = next((v for v in dashboard['visualizations'] if v['id'] == st.session_state.editing_viz_id), None)
-            
+            print()
+            print(f"Editing viz. {editing_viz}")
+            print()
             if editing_viz:
                 st.subheader("✏️ Edit Visualization")
                 
@@ -802,42 +813,24 @@ if st.session_state.current_page == "generate":
                     with col1:
                         if st.button("💾 Update Visualization", type="primary", disabled=not edit_query):
                             with st.spinner("🤖 Updating visualization..."):
-                                # Build context for AI including existing config
-                                context_prompt = f"""
-        Original visualization:
-        - Title: {editing_viz['result']['title']}
-        - Chart Type: {editing_viz['type']}
-        - Data Source: {editing_viz['result']['data_source']}
-        - X Column: {editing_viz['x_column']}
-        - Y Column: {editing_viz['y_column']}
-        - Original Query: {editing_viz.get('user_query', '')}
-
-        User wants to modify it with: {edit_query}
-
-        Generate updated visualization config maintaining the same structure.
-        """
-                                
-                                # Generate new config
-                                updated_config = dash_api.generate_sql_from_nlp(context_prompt)
-                                
-                                if "id" not in updated_config or updated_config["id"] is None:
-                                    updated_config["id"] = editing_viz['id']  # Keep same ID
-                                
-                                # Execute query to get data
-                                updated_viz = execute_visualization_query(updated_config)
-                                
-                                # Replace in dashboard
-                                viz_index = next((idx for idx, v in enumerate(dashboard['visualizations']) if v['id'] == editing_viz['id']), None)
-                                if viz_index is not None:
-                                    dashboard['visualizations'][viz_index] = updated_viz
-                                    dashboard['metadata']['last_modified'] = datetime.now()
-                                
-                                # Clear edit state
-                                st.session_state.editing_viz_id = None
-                                st.session_state.edit_query = ""
-                                
-                                st.success("✅ Visualization updated!")
-                                st.rerun()
+                                updated_config = dash_api.edit_visualization(editing_viz, edit_query)
+                                print()
+                                print(f"updated config: {updated_config}")
+                                print()
+                                if updated_config.get("success"):
+                                    updated_config["id"] = editing_viz['id']
+                                    updated_viz = execute_visualization_query(updated_config)
+                                    
+                                    viz_index = next((idx for idx, v in enumerate(dashboard['visualizations']) 
+                                                    if v['id'] == editing_viz['id']), None)
+                                    if viz_index is not None:
+                                        dashboard['visualizations'][viz_index] = updated_viz
+                                        dashboard['metadata']['last_modified'] = datetime.now()
+                                    
+                                    st.session_state.editing_viz_id = None
+                                    st.session_state.edit_query = ""
+                                    st.success("✅ Visualization updated!")
+                                    st.rerun()
                     
                     with col2:
                         if st.button("❌ Cancel", key="cancel_edit"):

@@ -37,9 +37,6 @@ class DashboardApi:
     def save_dashboard_to_api(self, dashboard: Dict[str, Any], user_id: int) -> Dict[str, Any]:
         """Save dashboard to backend API"""
         # Convert datetime objects to ISO strings in metadata
-        print()
-        print(f"Dashboard to save: {dashboard}")
-        print()
         metadata = dashboard.get("metadata", {})
         
         if "created_at" in metadata and hasattr(metadata["created_at"], "isoformat"):
@@ -73,6 +70,7 @@ class DashboardApi:
                 "original_query": viz["result"].get("original_user_query", ""),
                 "query_config": viz["result"].get("query_config", {}),
                 "config": viz["result"].get("config", {}),
+                "edit_history": viz["result"].get("edit_history", []),
                 "created_at": datetime.now().isoformat() + "Z"
             }
             api_visualizations.append(api_viz)
@@ -271,6 +269,19 @@ class DashboardApi:
             st.error(f"Failed to generate SQL from NLP: {str(e)}")
             return {}
         
+
+    def edit_visualization(self, original_viz: Dict[str, Any], edit_instructions: str) -> Dict[str, Any]:
+        """Edit visualization via backend"""
+        payload = {
+            "original_visualization": original_viz["result"],
+            "edit_instructions": edit_instructions
+        }
+        try:
+            return self.call_api("/nlp/query/edit", method="POST", data=payload)
+        except Exception as e:
+            st.error(f"Edit failed: {str(e)}")
+            return {}
+    
     # USER
     def get_user_info(self) -> Dict[str, Any]:
         """Get current user info from backend API"""
