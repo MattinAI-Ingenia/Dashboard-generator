@@ -734,7 +734,7 @@ if st.session_state.current_page == "generate":
                     for i in range(100):
                         time.sleep(0.01)
                         progress.progress(i + 1)
-                    
+                    print('GENERANDO VISUALIZATION CONFIG')
                     # Generate fake visualization config
                     viz_config = dash_api.generate_sql_from_nlp(query)
                     print()
@@ -772,10 +772,12 @@ if st.session_state.current_page == "generate":
 
             # Grid layout - 3 visualizations per row
             for i in range(0, len(visualizations_to_display), 3):
+                print('grid_layout')
                 cols = st.columns(3)
                 
                 for j, viz in enumerate(visualizations_to_display[i:i+3]):
                     with cols[j]:
+                        print('EN visualizations to display')
                         action = render_visualization(viz, show_controls=True)
                         
                         if action == "remove":

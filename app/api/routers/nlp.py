@@ -164,7 +164,7 @@ Select the most appropriate datasource for a user query.
             generated_sql = await ai_client.chat(
                 message=prompt_message,
                 app_id=1,
-                agent_id=1
+                agent_id=10
             )
 
         elif database_type.lower() == "mongodb":
@@ -186,6 +186,7 @@ Select the most appropriate datasource for a user query.
                 app_id=1,
                 agent_id=5
             )
+
 
         if not generated_sql:
             return NLPQueryResponse(
