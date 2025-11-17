@@ -8,12 +8,22 @@ dash_api = DashboardApi()
 def manage_data_sources(user_id: int):
     """Manage data sources: list, add, test, delete"""
 
+    # --- Global Refresh Button ---
+    if st.button("🔄 Refresh Data Sources"):
+        with st.spinner("Loading data sources..."):
+            # Fetch all datasources, including inactive/error
+            st.session_state.data_sources = dash_api.call_api(
+                f"/data-sources/?user_id={user_id}&status=all"
+            )
+        st.success(f"Loaded {len(st.session_state.data_sources)} data sources")
+        st.rerun()
+            
     # Tabs for different data source operations
     tab1, tab2, tab3 = st.tabs(["📋 My Sources", "➕ Add Source", "🧪 Test Sources"])
-    
+
     with tab1:
         # Fetch data sources from API
-        data_sources = dash_api.call_api(f"/data-sources/?user_id={user_id}")
+        data_sources = st.session_state.data_sources if st.session_state.get("data_sources") else dash_api.call_api(f"/data-sources/?user_id={user_id}&status=all")
         
         if data_sources:
             for ds in data_sources:

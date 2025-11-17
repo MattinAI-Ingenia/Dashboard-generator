@@ -65,7 +65,7 @@ class AICoreClient:
             httpx.HTTPError: If request fails
         """
         payload = {"message": message}
-        logger.info(f"Preparing chat request for agent_id={agent_id}, app_id={app_id}")
+        logger.info(f"Preparing chat request for agent_id={agent_id}, app_id={app_id} \n")
         # logger.info(f"Payload: {payload}")
 
         try:

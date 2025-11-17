@@ -7,6 +7,7 @@ import json
 import time
 from typing import Dict, List, Any
 import plotly.express as px
+import re
 
 from utils.dashboard_api import DashboardApi
 from utils.style import load_style
@@ -174,7 +175,15 @@ def render_visualization(viz: Dict[str, Any], show_controls: bool = False):
     
     # Handle error visualizations
     if viz.get('type') == 'error':
-        st.error(f"❌ {viz['result']['title']}: {viz['result']['description']}")
+        col1, col2 = st.columns([4, 1])
+        with col1:
+            st.error(f"❌ {viz['result']['title']}")
+        with col2:
+            if show_controls:
+                if st.button("🗑️", key=f"remove_{viz['id']}", help="Remove"):
+                    st.markdown('</div>', unsafe_allow_html=True)
+                    return "remove"    
+                    
         if show_controls:
             with st.expander("📝 Failed Query", expanded=False):
                 st.code(viz['result']['sql'], language='sql')
@@ -182,9 +191,6 @@ def render_visualization(viz: Dict[str, Any], show_controls: bool = False):
         return None
     
     # Check if data is available
-    # print()
-    # print(f"New Viz, {viz}")
-    # print()
     if viz.get('data') is None or viz['data'].empty:
         st.warning("⚠️ No data available for this visualization")
         st.markdown('</div>', unsafe_allow_html=True)
@@ -216,19 +222,25 @@ def _render_viz_content(viz: Dict[str, Any], show_controls: bool = False):
                     return "edit"
     
     df = viz['data']
+    # Query
     x_col = viz['x_column']
     y_col = viz['y_column']
     
+    # Visualization
+    x_col_viz = viz['x_column_query']
+    y_col_viz = viz['y_column_query']
+
     # Create compact visualization
     if viz['type'] == 'barchart':
-        fig = px.bar(df, x=x_col, y=y_col)
+        fig = px.bar(df, x=x_col_viz, y=y_col_viz)
         fig.update_traces(
             marker_color='rgba(37, 99, 235, 0.8)',
             marker_line_color='rgba(37, 99, 235, 1)',
             marker_line_width=1
         )
+
     elif viz['type'] == 'piechart':
-        fig = px.pie(df, names=x_col, values=y_col)
+        fig = px.pie(df, names=x_col_viz, values=y_col_viz)
         fig.update_traces(
             textposition='inside', 
             textinfo='percent+label',
@@ -237,27 +249,27 @@ def _render_viz_content(viz: Dict[str, Any], show_controls: bool = False):
             marker_line_color='white',
             marker_line_width=2
         )
+
     elif viz['type'] == 'timeseries':
-        y_col = viz['y_column']
-        
         # Check if y_col contains multiple columns (comma-separated string)
-        if ',' in str(y_col):
+        if ',' in str(y_col_viz):
             # Multiple series - melt the dataframe
-            y_cols = [col.strip() for col in y_col.split(',')]
-            df_melted = df.melt(id_vars=[x_col], value_vars=y_cols, 
+            y_cols = [col.strip() for col in y_col_viz.split(',')]
+            df_melted = df.melt(id_vars=[x_col_viz], value_vars=y_cols, 
                             var_name='series', value_name='value')
-            fig = px.line(df_melted, x=x_col, y='value', color='series')
+            fig = px.line(df_melted, x=x_col_viz, y='value', color='series')
         elif len(df.columns) > 2:
             # Multiple columns in dataframe
             y_cols = [col for col in df.columns if col != x_col]
             df_melted = df.melt(id_vars=[x_col], value_vars=y_cols,
                             var_name='series', value_name='value')
-            fig = px.line(df_melted, x=x_col, y='value', color='series')
+            fig = px.line(df_melted, x=x_col_viz, y='value', color='series')
         else:
             # Single line
-            fig = px.line(df, x=x_col, y=y_col)
+            fig = px.line(df, x=x_col_viz, y=y_col_viz)
         
         fig.update_traces(line_width=3, marker=dict(size=6))
+
     else:
         fig = px.bar(df, x=x_col, y=y_col)
     
@@ -313,18 +325,84 @@ def _render_viz_content(viz: Dict[str, Any], show_controls: bool = False):
         
         # Use st.code for proper SQL syntax highlighting with black text
         with st.expander("👤 User Query", expanded=False):
+            user_query = viz["result"]["original_user_query"]
+
             st.markdown(
-                f'<div style="background: #f8f9fa; padding: 10px; border-radius: 5px; border: 1px solid #dee2e6;">'
-                f'<code style="color: #000000 !important; font-family: monospace; font-size: 12px; background: transparent !important;">{viz["result"]["original_user_query"]}</code>'
-                f'</div>',
+                f'''
+                <div style="
+                    background: #1e1e2f;
+                    padding: 10px;
+                    border-radius: 8px;
+                    overflow-x: auto;
+                    font-family: monospace;
+                    color: #e0e0e0;
+                ">
+                    {user_query}
+                </div>
+                ''',
                 unsafe_allow_html=True
             )
 
         with st.expander("📝 SQL Query", expanded=False):
+           # Get the SQL string (from list if needed)
+            sql_string = viz["generated_sql"]
+            if isinstance(sql_string, list):
+                sql_string = sql_string[0]
+
+            # Insert line breaks before common keywords for readability
+            for kw in [" FROM ", " LEFT JOIN ", " WHERE ", " GROUP BY ", " ORDER BY "]:
+                sql_string = sql_string.replace(kw, f"\n{kw.strip()} ")
+
+            # Split into lines
+            lines = sql_string.split("\n")
+
+            # Define SQL keywords for highlighting
+            keywords = [
+                "SELECT", "FROM", "WHERE", "JOIN", "LEFT", "RIGHT", "INNER", "OUTER",
+                "ON", "GROUP BY", "ORDER BY", "LIMIT", "INSERT", "UPDATE", "DELETE"
+            ]
+
+            # Highlight each line individually
+            highlighted_lines = []
+            for line in lines:
+                for kw in keywords:
+                    line = re.sub(
+                        rf"\b{kw}\b",
+                        f'<span style="color:#1d4ed8; font-weight:bold;">{kw}</span>',
+                        line,
+                        flags=re.IGNORECASE
+                    )
+                # Strings in green
+                line = re.sub(r"('.*?')", r'<span style="color:#16a34a;">\1</span>', line)
+                # Comments in gray
+                line = re.sub(r"(--.*?$)", r'<span style="color:#6b7280;">\1</span>', line, flags=re.MULTILINE)
+                highlighted_lines.append(line)
+
+            # Combine lines with subtle separators
+            lines_html = "".join(
+                f'<div>{line}</div>'
+                for line in highlighted_lines
+            )
+
             st.markdown(
-                f'<div style="background: #f8f9fa; padding: 10px; border-radius: 5px; border: 1px solid #dee2e6;">'
-                f'<code style="color: #000000 !important; font-family: monospace; font-size: 12px; background: transparent !important;">{viz["generated_sql"]}</code>'
-                f'</div>', 
+                f'''
+                <div style="
+                    background: #1e1e2f; 
+                    padding: 15px; 
+                    border-radius: 8px; 
+                    border: 1px solid #3f3f5f; 
+                    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+                    overflow-x: auto;
+                ">
+                    <code style="
+                        color: #e0e0e0; 
+                        font-family: monospace; 
+                        font-size: 13px; 
+                        background: transparent !important;
+                        white-space: pre-wrap;
+                    ">{lines_html}</code>
+                </div>
+                ''',
                 unsafe_allow_html=True
             )
         
@@ -370,10 +448,20 @@ def execute_visualization_query(viz_config: Dict[str, Any]) -> Dict[str, Any]:
         
         x_column = result["config"].get("x_column")
         y_column = result["config"].get("y_column")
+    
+        x_column_query = result["query_config"].get("x_column")
+        y_column_query = result["query_config"].get("y_column")
+
+        print()
+        print(f"x column query: {x_column_query}")
+        print(f"y column query: {y_column_query}")
+        print()
 
         return {
             **viz_config,
             "data": df,
+            "x_column_query": x_column_query,
+            "y_column_query": y_column_query,
             "x_column": x_column,
             "y_column": y_column,
             "type": result["chart_type"],
@@ -397,7 +485,10 @@ def execute_visualization_query(viz_config: Dict[str, Any]) -> Dict[str, Any]:
 def load_dashboard_with_data(dashboard: Dict[str, Any]) -> Dict[str, Any]:
     """Load dashboard and execute all visualization queries to get live data"""
     dashboard_with_data = dashboard.copy()
-    
+    print()
+    print(f"Loading dashboard with data: {dashboard}")
+    print()
+
     # Execute each visualization query
     visualizations_with_data = []
     
@@ -547,7 +638,7 @@ with st.sidebar:
         with col1:
             if st.button("💾 Save", key="sidebar_save"):
                 with st.spinner("Saving dashboard..."):
-                    result = dash_api.save_dashboard_to_api(dashboard)
+                    result = dash_api.save_dashboard_to_api(dashboard, st.session_state.user_id)
                     if result:
                         # Refresh dashboards from API after saving
                         saved_dashboards = dash_api.list_saved_dashboards(user_id=st.session_state.user_id)
@@ -706,6 +797,7 @@ elif st.session_state.current_page == "dashboards":
     # Refresh dashboards from API
     if st.button("🔄 Refresh from Database"):
         with st.spinner("Loading dashboards from database..."):
+            print(f"Sesion de usuario: {st.session_state.user_id}")
             saved_dashboards = dash_api.list_saved_dashboards(user_id=st.session_state.user_id)
             
             # Clear all saved dashboards and reload
@@ -778,7 +870,7 @@ elif st.session_state.current_page == "dashboards":
 elif st.session_state.current_page == "import_export":
     st.title("📤 Import/Export")
     
-    import_export_dashboards()
+    import_export_dashboards(st.session_state.user_id)
 
 elif st.session_state.current_page == "data_sources":
     st.title("🔌 Data Sources")

@@ -83,7 +83,7 @@ class DataSourceConnector:
                 "error": f"MongoDB connection failed: {str(e)}"
             }
     
-    async def get_schema(self) -> Optional[Dict[str, Any]]:
+    async def get_schema(self, include_views: bool = True, only_with_data: bool = True) -> Optional[Dict[str, Any]]:
         """Get schema information from the data source"""
         try:
             if self.type in ["postgresql", "mysql", "sqlite"]:
@@ -103,6 +103,7 @@ class DataSourceConnector:
         
         inspector = inspect(engine)
         tables = []
+        views = []
         
         for table_name in inspector.get_table_names():
             columns = []

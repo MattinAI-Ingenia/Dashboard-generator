@@ -34,7 +34,7 @@ class DashboardApi:
             return None
 
     # DASHBOARD
-    def save_dashboard_to_api(self, dashboard: Dict[str, Any]) -> Dict[str, Any]:
+    def save_dashboard_to_api(self, dashboard: Dict[str, Any], user_id: int) -> Dict[str, Any]:
         """Save dashboard to backend API"""
         # Convert datetime objects to ISO strings in metadata
         metadata = dashboard.get("metadata", {})
@@ -59,6 +59,7 @@ class DashboardApi:
                     "statement": viz["result"].get("sql", "")
                 },
                 "original_query": viz["result"].get("original_user_query", ""),
+                "query_config": viz["result"].get("query_config", {}),
                 "config": viz["result"].get("config", {}),
                 "created_at": datetime.now().isoformat() + "Z"
             }
@@ -66,6 +67,7 @@ class DashboardApi:
         
         # Format according to your API specification
         dashboard_data = {
+            "user_id": user_id,
             "name": dashboard["name"],
             "description": dashboard.get("description", ""),
             "visualizations": api_visualizations
@@ -109,6 +111,7 @@ class DashboardApi:
                             "data_source": viz.get("data_source", ""),
                             "sql": viz["query"]["statement"],
                             "original_user_query": viz.get("original_query", ""),
+                            "query_config": viz.get("query_config", {}),
                             "config": viz.get("config", {})
                         }
                     })
@@ -231,6 +234,9 @@ class DashboardApi:
         }
         try:
             result = self.call_api("/nlp/query", method="POST", data=request_payload)
+            print()
+            print(f"Query generation result: {result}")
+            print()
             return result
         except Exception as e:
             st.error(f"Failed to generate SQL from NLP: {str(e)}")

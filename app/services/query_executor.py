@@ -204,6 +204,7 @@ class QueryExecutorService:
     
     def _validate_sql_statement(self, statement: str) -> None:
         """Validate SQL statement for security and syntax"""
+        # logger.info(f"sql statement, {statement}")
         # Remove comments and normalize whitespace
         cleaned = re.sub(r'--.*?\n|/\*.*?\*/', '', statement, flags=re.DOTALL)
         cleaned = re.sub(r'\s+', ' ', cleaned).strip().upper()
@@ -221,7 +222,7 @@ class QueryExecutorService:
                 )
         
         # Ensure it's a SELECT statement
-        if not cleaned.startswith('SELECT') or cleaned.startswith('WITH'):
+        if not (cleaned.startswith('SELECT') or cleaned.startswith('WITH')):
             raise QueryValidationError("Only SELECT/WITH queries are allowed")
     
     def _add_limit_to_sql(self, statement: str, limit: int) -> str:

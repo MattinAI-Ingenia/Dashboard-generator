@@ -6,7 +6,7 @@ from utils.dashboard_api import DashboardApi
 
 dash_api = DashboardApi()
 
-def import_export_dashboards():
+def import_export_dashboards(user_id: int):
     """Import and export dashboards"""
 
     tab1, tab2 = st.tabs(["📤 Export", "📥 Import"])
@@ -20,7 +20,7 @@ def import_export_dashboards():
         if not saved_dashboards:
             if st.button("🔄 Load Dashboards from Database"):
                 with st.spinner("Loading dashboards..."):
-                    saved_dashboards = dash_api.list_saved_dashboards()
+                    saved_dashboards = dash_api.list_saved_dashboards(user_id=user_id)
                     for dashboard in saved_dashboards:
                         st.session_state.dashboards[str(dashboard["id"])] = dashboard
                     st.rerun()

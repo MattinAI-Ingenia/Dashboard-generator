@@ -92,6 +92,7 @@ def save_dashboard(
     
     Creates new dashboard or updates existing one based on presence of ID.
     """
+    logger.info(f"dash_data: {dashboard_data}")
     try:
         # Check if this is an update (has ID) or create (no ID)
         if hasattr(dashboard_data, 'id') and dashboard_data.id:
@@ -104,10 +105,9 @@ def save_dashboard(
                 )
             
             update_data = {
-                "dashboard_data": dashboard_data.model_dump(),
+                "dashboard_data": dashboard_data.model_dump(exclude={'id', 'user_id'}),
                 "updated_at": datetime.now()
             }
-            
             dashboard = dashboard_repository.update(
                 db,
                 db_obj=existing_dashboard,
@@ -117,10 +117,12 @@ def save_dashboard(
             logger.info(f"Dashboard updated: {dashboard_data.name} (ID: {dashboard.id})")
             
         else:
+            dashboard_dict = dashboard_data.model_dump(exclude={'id', 'user_id'})
+            
             # Create new dashboard
             create_data = {
-                "user_id": 1,  # Placeholder
-                "dashboard_data": dashboard_data.model_dump(),
+                "user_id": dashboard_data.user_id,  
+                "dashboard_data": dashboard_dict,
                 "created_at": datetime.now(),
                 "updated_at": datetime.now()
             }
@@ -130,7 +132,7 @@ def save_dashboard(
                 obj_in=DashboardCreate(**create_data)
             )
             
-            logger.info(f"Dashboard created: {dashboard_data.name} (ID: {dashboard.id})")
+            logger.info(f"Dashboard created: {dashboard_data.name} (ID: {dashboard.id}), for user: {dashboard_data.user_id}")
         
         return dashboard
         

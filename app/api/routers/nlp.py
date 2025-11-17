@@ -32,6 +32,7 @@ class SQLGenerationResult(BaseModel):
     data_source: str
     original_user_query: str
     chart_type: Optional[str] = None
+    query_config: Optional[Dict[str, Any]] = None
     config: Optional[Dict[str, Any]] = None
 
 class MongodbGenerationResult(BaseModel):
@@ -91,7 +92,7 @@ async def generate_sql_from_nlp(
         except json.JSONDecodeError:
             raise ValueError("AI response is not valid JSON")
         
-        logger.info(f"Metadata extraction response: {parsed_metadata}")
+        logger.info(f"Metadata extraction response: {parsed_metadata} \n")
 
         # Step 2: Select appropriate datasource
         datasources_info = [
@@ -123,7 +124,7 @@ Select the most appropriate datasource for a user query.
         except json.JSONDecodeError:
             raise ValueError("AI response is not valid JSON")
 
-        logger.info(f"Parsed datasource selection response: {parsed_selected_datasource}")
+        logger.info(f"Parsed datasource selection response: {parsed_selected_datasource} \n")
 
         # Now safely access the database_name
         database_name = parsed_selected_datasource.get("database_name")
@@ -158,7 +159,7 @@ Select the most appropriate datasource for a user query.
     {request.query}
     """
 
-            logger.info(f"Prompt message for SQL generation: {prompt_message}")
+            # logger.info(f"Prompt message for SQL generation: {prompt_message}")
 
             generated_sql = await ai_client.chat(
                 message=prompt_message,
@@ -194,13 +195,13 @@ Select the most appropriate datasource for a user query.
             )
         
         generated_sql = generated_sql.get("response", "{}")
-        logger.info(f"Generated SQL/MongoDB query: {generated_sql}")
+        # logger.info(f"Generated SQL/MongoDB query: {generated_sql} \n")
         try:
             parsed_generated_sql = json.loads(generated_sql)
         except json.JSONDecodeError:
             raise ValueError("AI response is not valid JSON")
 
-        logger.info(f"Parsed generated SQL response: {parsed_generated_sql}")
+        logger.info(f"Parsed generated SQL response: {parsed_generated_sql} \nPreparing chat request for agent_i")
         
         if database_type.lower() == "mongodb":
             # Return MongoDB result
@@ -235,7 +236,11 @@ Select the most appropriate datasource for a user query.
                     description=parsed_metadata.get("description", ""),
                     data_source=database_name,
                     chart_type=parsed_metadata.get("chart_type"),
-                    config= {"x_column": parsed_generated_sql.get("x_column"), "y_column": parsed_generated_sql.get("y_column")}
+                    query_config={
+                        "x_column": parsed_generated_sql.get("x_column"), 
+                        "y_column": parsed_generated_sql.get("y_column")
+                    }, 
+                    config= parsed_metadata.get("config")
                 )
             )
     
@@ -247,3 +252,15 @@ Select the most appropriate datasource for a user query.
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error processing NLP query: {str(e)}"
         )
+
+@router.post("/query/orchestrator", response_model=NLPQueryResponse)
+async def generate_query_from_nlp(
+    request: NLPQueryRequest,
+    db: Session = Depends(get_db),
+    ai_client: AICoreClient = Depends(get_ai_client)
+) -> NLPQueryResponse:
+    """Wrapper function to generate query from NLP request"""
+
+    
+
+    return await generate_sql_from_nlp(request, db, ai_client)

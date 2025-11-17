@@ -25,7 +25,7 @@ logger = logging.getLogger(__name__)
 
 @router.get("/", response_model=List[DataSourceResponse])
 def list_data_sources(
-    status: Optional[str] = Query("active", enum=["all", "active", "inactive", "error"]),
+    status: Optional[str] = Query("all", enum=["all", "active", "inactive", "error"]),
     type: Optional[str] = Query(None, enum=["sql", "nosql"]),
     user_id: str = Query(...),
     skip: int = Query(0, ge=0),

@@ -10,12 +10,14 @@ class VisualizationData(BaseModel):
     data_source: str
     query: Dict[str, Any]  # e.g. {"statement": "...", "type": "sql"}
     original_query: str
+    query_config: Dict[str, Any] = {}
     config: Dict[str, Any] = {}
 
 class DashboardData(BaseModel):
     model_config = ConfigDict(str_strip_whitespace=True)
     
     id: Optional[int] = None
+    user_id: int
     name: str
     description: Optional[str] = None
     visualizations: List[VisualizationData] = []
