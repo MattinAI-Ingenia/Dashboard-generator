@@ -37,6 +37,9 @@ class DashboardApi:
     def save_dashboard_to_api(self, dashboard: Dict[str, Any], user_id: int) -> Dict[str, Any]:
         """Save dashboard to backend API"""
         # Convert datetime objects to ISO strings in metadata
+        print()
+        print(f"Dashboard to save: {dashboard}")
+        print()
         metadata = dashboard.get("metadata", {})
         
         if "created_at" in metadata and hasattr(metadata["created_at"], "isoformat"):
@@ -47,17 +50,26 @@ class DashboardApi:
         # Convert visualizations to API format
         api_visualizations = []
         for viz in dashboard.get("visualizations", []):
-            # Remove pandas DataFrame and other frontend-specific fields
+            result = viz.get("result")
+
+            # Detect MongoDB vs SQL
+            if "mongodb_query" in result:
+                query = {
+                    "type": "mongodb",
+                    "statement": result["mongodb_query"]
+                }
+            else:
+                query = {
+                    "type": "sql",
+                    "statement": result.get("sql", "")
+                }
             api_viz = {
                 "id": viz["id"],
                 "title": viz["result"]["title"],
                 "description": viz["result"].get("description", ""),
                 "chart_type": viz["result"].get("chart_type", "table"),
                 "data_source": viz["result"].get("data_source", ""),
-                "query": {
-                    "type": "sql",
-                    "statement": viz["result"].get("sql", "")
-                },
+                "query": query,
                 "original_query": viz["result"].get("original_user_query", ""),
                 "query_config": viz["result"].get("query_config", {}),
                 "config": viz["result"].get("config", {}),
@@ -102,19 +114,36 @@ class DashboardApi:
                 # Transform API visualizations to frontend format
                 visualizations = []
                 for viz in result["dashboard_data"].get("visualizations", []):
-                    visualizations.append({
-                        "id": viz["id"],
-                        "result": {  # Wrap in "result" key for frontend compatibility
+                    query_type = viz["query"]["type"]
+
+                    if query_type == "mongodb":
+                        # Build result based on query type
+                        result_data = {
+                            "mongodb_query": viz["query"]["statement"],
                             "title": viz["title"],
                             "description": viz.get("description", ""),
                             "chart_type": viz.get("chart_type", "table"),
                             "data_source": viz.get("data_source", ""),
-                            "sql": viz["query"]["statement"],
                             "original_user_query": viz.get("original_query", ""),
                             "query_config": viz.get("query_config", {}),
                             "config": viz.get("config", {})
                         }
-                    })
+                    else:
+                        result_data = {
+                            "sql": viz["query"]["statement"],
+                            "title": viz["title"],
+                            "description": viz.get("description", ""),
+                            "chart_type": viz.get("chart_type", "table"),
+                            "data_source": viz.get("data_source", ""),
+                            "original_user_query": viz.get("original_query", ""),
+                            "query_config": viz.get("query_config", {}),
+                            "config": viz.get("config", {})
+                        }
+
+                    visualizations.append({
+                        "id": viz["id"],
+                        "result": result_data
+                        })
                 
                 dashboard = {
                     "id": result["id"],
