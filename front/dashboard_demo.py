@@ -137,6 +137,10 @@ def init_session_state():
         st.session_state.current_dashboard = None
     if 'current_page' not in st.session_state:
         st.session_state.current_page = "generate"
+    if 'editing_viz_id' not in st.session_state:
+        st.session_state.editing_viz_id = None
+    if 'edit_query' not in st.session_state:
+        st.session_state.edit_query = ""
 
 init_session_state()
 
@@ -184,9 +188,9 @@ def render_visualization(viz: Dict[str, Any], show_controls: bool = False):
                     st.markdown('</div>', unsafe_allow_html=True)
                     return "remove"    
                     
-        if show_controls:
-            with st.expander("📝 Failed Query", expanded=False):
-                st.code(viz['result']['sql'], language='sql')
+        # if show_controls:
+            # with st.expander("📝 Failed Query", expanded=False):
+            #     # st.code(viz['result']['sql'], language='sql')
         st.markdown('</div>', unsafe_allow_html=True)
         return None
     
@@ -219,6 +223,8 @@ def _render_viz_content(viz: Dict[str, Any], show_controls: bool = False):
                     return "remove"
             with col_b:
                 if st.button("✏️", key=f"edit_{viz['id']}", help="Edit"):
+                    st.session_state.editing_viz_id = viz['id']
+                    st.session_state.edit_query = viz.get('user_query', '')
                     return "edit"
     
     df = viz['data']
@@ -343,68 +349,90 @@ def _render_viz_content(viz: Dict[str, Any], show_controls: bool = False):
                 unsafe_allow_html=True
             )
 
-        with st.expander("📝 SQL Query", expanded=False):
-           # Get the SQL string (from list if needed)
+        with st.expander("📝 Generated Query", expanded=False):
+            # Get the SQL string (from list if needed)
             sql_string = viz["generated_sql"]
             if isinstance(sql_string, list):
                 sql_string = sql_string[0]
 
-            # Insert line breaks before common keywords for readability
-            for kw in [" FROM ", " LEFT JOIN ", " WHERE ", " GROUP BY ", " ORDER BY "]:
-                sql_string = sql_string.replace(kw, f"\n{kw.strip()} ")
+            try:
+                # Try parsing as MongoDB JSON
+                mongo_query = json.loads(sql_string)
+                
+                # Pretty format with syntax highlighting
+                collection = mongo_query.get("collection", "")
+                operation = mongo_query.get("operation", "")
+                pipeline = mongo_query.get("pipeline", [])
+                
+                formatted = f'<span style="color:#9333ea;">db</span>.<span style="color:#2563eb;">{collection}</span>.<span style="color:#16a34a;">{operation}</span>(\n'
+                formatted += json.dumps(pipeline, indent=2).replace('"', '<span style="color:#f59e0b;">"</span>')
+                formatted += '\n)'
+                
+                st.markdown(
+                    f'''
+                    <div style="background:#1e1e2f;padding:15px;border-radius:8px;border:1px solid #3f3f5f;overflow-x:auto">
+                        <code style="color:#e0e0e0;font-family:monospace;font-size:13px;white-space:pre">{formatted}</code>
+                    </div>
+                    ''',
+                    unsafe_allow_html=True
+                )
+            except json.JSONDecodeError:
+                # Insert line breaks before common keywords for readability
+                for kw in [" FROM ", " LEFT JOIN ", " WHERE ", " GROUP BY ", " ORDER BY "]:
+                    sql_string = sql_string.replace(kw, f"\n{kw.strip()} ")
 
-            # Split into lines
-            lines = sql_string.split("\n")
+                # Split into lines
+                lines = sql_string.split("\n")
 
-            # Define SQL keywords for highlighting
-            keywords = [
-                "SELECT", "FROM", "WHERE", "JOIN", "LEFT", "RIGHT", "INNER", "OUTER",
-                "ON", "GROUP BY", "ORDER BY", "LIMIT", "INSERT", "UPDATE", "DELETE"
-            ]
+                # Define SQL keywords for highlighting
+                keywords = [
+                    "SELECT", "FROM", "WHERE", "JOIN", "LEFT", "RIGHT", "INNER", "OUTER",
+                    "ON", "GROUP BY", "ORDER BY", "LIMIT", "INSERT", "UPDATE", "DELETE"
+                ]
 
-            # Highlight each line individually
-            highlighted_lines = []
-            for line in lines:
-                for kw in keywords:
-                    line = re.sub(
-                        rf"\b{kw}\b",
-                        f'<span style="color:#1d4ed8; font-weight:bold;">{kw}</span>',
-                        line,
-                        flags=re.IGNORECASE
-                    )
-                # Strings in green
-                line = re.sub(r"('.*?')", r'<span style="color:#16a34a;">\1</span>', line)
-                # Comments in gray
-                line = re.sub(r"(--.*?$)", r'<span style="color:#6b7280;">\1</span>', line, flags=re.MULTILINE)
-                highlighted_lines.append(line)
+                # Highlight each line individually
+                highlighted_lines = []
+                for line in lines:
+                    for kw in keywords:
+                        line = re.sub(
+                            rf"\b{kw}\b",
+                            f'<span style="color:#1d4ed8; font-weight:bold;">{kw}</span>',
+                            line,
+                            flags=re.IGNORECASE
+                        )
+                    # Strings in green
+                    line = re.sub(r"('.*?')", r'<span style="color:#16a34a;">\1</span>', line)
+                    # Comments in gray
+                    line = re.sub(r"(--.*?$)", r'<span style="color:#6b7280;">\1</span>', line, flags=re.MULTILINE)
+                    highlighted_lines.append(line)
 
-            # Combine lines with subtle separators
-            lines_html = "".join(
-                f'<div>{line}</div>'
-                for line in highlighted_lines
-            )
+                # Combine lines with subtle separators
+                lines_html = "".join(
+                    f'<div>{line}</div>'
+                    for line in highlighted_lines
+                )
 
-            st.markdown(
-                f'''
-                <div style="
-                    background: #1e1e2f; 
-                    padding: 15px; 
-                    border-radius: 8px; 
-                    border: 1px solid #3f3f5f; 
-                    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-                    overflow-x: auto;
-                ">
-                    <code style="
-                        color: #e0e0e0; 
-                        font-family: monospace; 
-                        font-size: 13px; 
-                        background: transparent !important;
-                        white-space: pre-wrap;
-                    ">{lines_html}</code>
-                </div>
-                ''',
-                unsafe_allow_html=True
-            )
+                st.markdown(
+                    f'''
+                    <div style="
+                        background: #1e1e2f; 
+                        padding: 15px; 
+                        border-radius: 8px; 
+                        border: 1px solid #3f3f5f; 
+                        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+                        overflow-x: auto;
+                    ">
+                        <code style="
+                            color: #e0e0e0; 
+                            font-family: monospace; 
+                            font-size: 13px; 
+                            background: transparent !important;
+                            white-space: pre-wrap;
+                        ">{lines_html}</code>
+                    </div>
+                    ''',
+                    unsafe_allow_html=True
+                )
         
         with st.expander("ℹ️ Execution Info", expanded=False):
             exec_info = viz.get('execution_info', {})
@@ -452,11 +480,6 @@ def execute_visualization_query(viz_config: Dict[str, Any]) -> Dict[str, Any]:
         x_column_query = result["query_config"].get("x_column")
         y_column_query = result["query_config"].get("y_column")
 
-        print()
-        print(f"x column query: {x_column_query}")
-        print(f"y column query: {y_column_query}")
-        print()
-
         return {
             **viz_config,
             "data": df,
@@ -465,7 +488,7 @@ def execute_visualization_query(viz_config: Dict[str, Any]) -> Dict[str, Any]:
             "x_column": x_column,
             "y_column": y_column,
             "type": result["chart_type"],
-            "generated_sql": result.get("sql") or json.dumps(result.get("pipeline")),
+            "generated_sql": result.get("mongodb_query") or result.get("sql", ""),
             "user_query": result.get("original_user_query", ""),
             "execution_info": {
                 "row_count": len(df),
@@ -734,7 +757,7 @@ if st.session_state.current_page == "generate":
                     for i in range(100):
                         time.sleep(0.01)
                         progress.progress(i + 1)
-                    print('GENERANDO VISUALIZATION CONFIG')
+                    
                     # Generate fake visualization config
                     viz_config = dash_api.generate_sql_from_nlp(query)
                     print()
@@ -757,6 +780,73 @@ if st.session_state.current_page == "generate":
             
         st.divider()
         
+        if st.session_state.editing_viz_id:
+            editing_viz = next((v for v in dashboard['visualizations'] if v['id'] == st.session_state.editing_viz_id), None)
+            
+            if editing_viz:
+                st.subheader("✏️ Edit Visualization")
+                
+                with st.container():
+                    st.info(f"Editing: **{editing_viz['result']['title']}**")
+                    
+                    edit_query = st.text_area(
+                        "Describe changes",
+                        value=st.session_state.edit_query,
+                        placeholder="Example: Change to a line chart and group by month instead...",
+                        height=100,
+                        key="edit_query_input"
+                    )
+                    
+                    col1, col2, col3 = st.columns([2, 1, 1])
+                    
+                    with col1:
+                        if st.button("💾 Update Visualization", type="primary", disabled=not edit_query):
+                            with st.spinner("🤖 Updating visualization..."):
+                                # Build context for AI including existing config
+                                context_prompt = f"""
+        Original visualization:
+        - Title: {editing_viz['result']['title']}
+        - Chart Type: {editing_viz['type']}
+        - Data Source: {editing_viz['result']['data_source']}
+        - X Column: {editing_viz['x_column']}
+        - Y Column: {editing_viz['y_column']}
+        - Original Query: {editing_viz.get('user_query', '')}
+
+        User wants to modify it with: {edit_query}
+
+        Generate updated visualization config maintaining the same structure.
+        """
+                                
+                                # Generate new config
+                                updated_config = dash_api.generate_sql_from_nlp(context_prompt)
+                                
+                                if "id" not in updated_config or updated_config["id"] is None:
+                                    updated_config["id"] = editing_viz['id']  # Keep same ID
+                                
+                                # Execute query to get data
+                                updated_viz = execute_visualization_query(updated_config)
+                                
+                                # Replace in dashboard
+                                viz_index = next((idx for idx, v in enumerate(dashboard['visualizations']) if v['id'] == editing_viz['id']), None)
+                                if viz_index is not None:
+                                    dashboard['visualizations'][viz_index] = updated_viz
+                                    dashboard['metadata']['last_modified'] = datetime.now()
+                                
+                                # Clear edit state
+                                st.session_state.editing_viz_id = None
+                                st.session_state.edit_query = ""
+                                
+                                st.success("✅ Visualization updated!")
+                                st.rerun()
+                    
+                    with col2:
+                        if st.button("❌ Cancel", key="cancel_edit"):
+                            st.session_state.editing_viz_id = None
+                            st.session_state.edit_query = ""
+                            st.rerun()
+                
+                st.divider()
+
         # Display visualizations in grid
         if dashboard['visualizations']:
             st.subheader(f"📊 Current Visualizations ({len(dashboard['visualizations'])})")
@@ -772,12 +862,10 @@ if st.session_state.current_page == "generate":
 
             # Grid layout - 3 visualizations per row
             for i in range(0, len(visualizations_to_display), 3):
-                print('grid_layout')
                 cols = st.columns(3)
                 
                 for j, viz in enumerate(visualizations_to_display[i:i+3]):
                     with cols[j]:
-                        print('EN visualizations to display')
                         action = render_visualization(viz, show_controls=True)
                         
                         if action == "remove":
@@ -788,7 +876,9 @@ if st.session_state.current_page == "generate":
                                 st.success("✅ Visualization removed!")
                                 st.rerun()
                         elif action == "edit":
-                            st.info("✏️ Editing functionality coming soon!")
+                            st.session_state.editing_viz_id = viz['id']
+                            st.session_state.edit_query = viz.get('user_query', '')
+                            st.rerun()
 
         else:
             st.info("🎯 No visualizations yet. Add your first visualization using the form above!")

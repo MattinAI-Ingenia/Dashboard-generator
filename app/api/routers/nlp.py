@@ -42,6 +42,7 @@ class MongodbGenerationResult(BaseModel):
     data_source: str
     original_user_query: str
     chart_type: Optional[str] = None
+    query_config: Optional[Dict[str, Any]] = None
     config: Optional[Dict[str, Any]] = None
 
 class NLPQueryResponse(BaseModel):
@@ -219,7 +220,8 @@ Select the most appropriate datasource for a user query.
                     description=parsed_metadata.get("description", ""),
                     data_source=database_name,
                     chart_type=parsed_metadata.get("chart_type"),
-                    config={
+                    config= parsed_metadata.get("config"),
+                    query_config={
                         "x_column": parsed_generated_sql.get("x_column"), 
                         "y_column": parsed_generated_sql.get("y_column")
                     }
@@ -261,7 +263,5 @@ async def generate_query_from_nlp(
     ai_client: AICoreClient = Depends(get_ai_client)
 ) -> NLPQueryResponse:
     """Wrapper function to generate query from NLP request"""
-
-    
 
     return await generate_sql_from_nlp(request, db, ai_client)
