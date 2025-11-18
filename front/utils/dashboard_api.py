@@ -124,7 +124,8 @@ class DashboardApi:
                             "data_source": viz.get("data_source", ""),
                             "original_user_query": viz.get("original_query", ""),
                             "query_config": viz.get("query_config", {}),
-                            "config": viz.get("config", {})
+                            "config": viz.get("config", {}),
+                            "edit_history": viz.get("edit_history", [])
                         }
                     else:
                         result_data = {
@@ -135,7 +136,9 @@ class DashboardApi:
                             "data_source": viz.get("data_source", ""),
                             "original_user_query": viz.get("original_query", ""),
                             "query_config": viz.get("query_config", {}),
-                            "config": viz.get("config", {})
+                            "config": viz.get("config", {}),
+                            "edit_history": viz.get("edit_history", [])
+
                         }
 
                     visualizations.append({

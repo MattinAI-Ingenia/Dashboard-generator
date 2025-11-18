@@ -159,6 +159,9 @@ Select the most appropriate datasource for a user query.
     ### AVAILABLE DATASOURCE:
     {json.dumps(schema)}
 
+    ### METADATA
+    {parsed_metadata.get("chart_type", "")}
+
     ### USER QUERY:
     {request.query}
     """
@@ -178,6 +181,9 @@ Select the most appropriate datasource for a user query.
     
     ### AVAILABLE DATASOURCE:
     {json.dumps(schema)}
+
+    ### METADATA
+    {parsed_metadata.get("chart_type", "")}
 
     ### USER QUERY:
     {request.query}
@@ -311,6 +317,28 @@ async def edit_visualization_query(
 
         original_user_query = original_viz.get("original_user_query")
 
+        # Get metadata
+        metadata_response = await ai_client.chat(
+            message=f"""Update the metadata based on the edit.
+
+        ### ORIGINAL USER QUERY:
+        {original_user_query}
+
+        ### EDIT HISTORY: 
+        {history_context if history_context else "No previous edits"}
+
+        ### LAST EDIT INSTRUCTIONS:
+        {edit_instructions}
+
+        Generate updated title, description, chart_type, and config if needed.""",
+            agent_id=3,
+            app_id=1
+        )
+
+        parsed_metadata = json.loads(metadata_response.get("response", "{}"))
+        logger.info(f"parsed metadata: {parsed_metadata}")
+
+        # Edit query
         prompt = f"""
 Modify the existing visualization based on user instructions. Some filed may not need to be changed.
 
@@ -319,9 +347,12 @@ Modify the existing visualization based on user instructions. Some filed may not
 - Chart Type: {original_viz['chart_type']}
 - Data Source: {original_viz['data_source']}
 - Original User Query: {original_user_query}
-- Original Database Query: {original_query}
+- Last Database Query: {original_query}
 - X Column: {original_viz['query_config']['x_column']}
 - Y Column: {original_viz['query_config']['y_column']}
+
+### NEW VISUALIZATION METADATA
+- Chart Type: {parsed_metadata.get("chart_type")}
 
 ### EDIT HISTORY:
 {history_context if history_context else "No previous edits"}
@@ -341,24 +372,12 @@ Generate the updated query maintaining the same output structure.
         parsed = json.loads(generated.get("response", "{}"))
         logger.info(f"generated edited query: {parsed}")
 
-        # Get metadata
-        metadata_response = await ai_client.chat(
-            message=f"### ORIGINAL USER QUERY:\n{original_query}\n\n ### HOW TO EDIT ORIGINAL USER QUERY:\n{edit_instructions}",
-            agent_id=3,
-            app_id=1
-        )
-        parsed_metadata = json.loads(metadata_response.get("response", "{}"))
-        logger.info(f"parsed metadata: {parsed_metadata}")
-
         # Append to edit history
         new_edit = {
-            "instruction": edit_instructions,
-            "query_snapshot": parsed.get("query") if database_type != "mongodb" else json.dumps({
-                "collection": parsed.get("collection"),
-                "operation":  parsed.get("operation"),
-                "pipeline": parsed.get("pipeline", [])
-            })
-        }
+            "timestamp": datetime.datetime.now().isoformat(),
+            "instruction": edit_instructions
+            }
+    
         edit_history.append(new_edit)
 
         # Return result
@@ -368,7 +387,7 @@ Generate the updated query maintaining the same output structure.
                 result=MongodbGenerationResult(
                     mongodb_query=json.dumps({
                         "collection": parsed.get("collection"),
-                        "operation": parsed.get("operation"),
+                        "operation": "aggregate",
                         "pipeline": parsed.get("pipeline", [])
                     }),
                     original_user_query=original_user_query,
@@ -384,6 +403,7 @@ Generate the updated query maintaining the same output structure.
                     edit_history=edit_history
                 )
             )
+        
         else:
             return NLPQueryResponse(
                 success=True,
@@ -402,6 +422,7 @@ Generate the updated query maintaining the same output structure.
                     edit_history=edit_history
                 )
             )
+        
     except Exception as e:
         logger.error(f"Edit error: {str(e)}", exc_info=True)
         raise HTTPException(500, f"Edit failed: {str(e)}")

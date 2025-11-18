@@ -123,7 +123,7 @@ async def execute_query(
             except (TimeoutError, ValueError, Exception) as execution_error:
                 # If this is the last attempt, raise the error
                 if attempt == max_retries - 1:
-                    logger.error(f"Query execution failed after {max_retries} attempts: {str(execution_error)}")
+                    logger.error(f"Query execution failed after {max_retries} attempts: {str(execution_error)} \n")
                     
                     if isinstance(execution_error, TimeoutError):
                         raise HTTPException(
@@ -181,6 +181,7 @@ async def execute_query(
                     ### ORIGINAL USER INTENT:
                     {getattr(request, 'original_user_query', 'User wanted to query the database')}
                     """
+
                 elif database_type.lower() == "mongodb":
                     validation_prompt = f"""
                     Analyze why this MongoDB query failed during execution and suggest a fix.
@@ -322,3 +323,4 @@ async def execute_query(
                     "details": {"message": str(e)}
                 }
             )
+        

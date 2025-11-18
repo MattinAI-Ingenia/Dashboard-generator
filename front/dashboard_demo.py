@@ -358,7 +358,7 @@ def _render_viz_content(viz: Dict[str, Any], show_controls: bool = False):
             else:
                 st.caption("No edits yet")
 
-        with st.expander("📝 Generated Query", expanded=False):
+        with st.expander("📝 Last Generated Query", expanded=False):
             # Get the SQL string (from list if needed)
             sql_string = viz["generated_sql"]
             if isinstance(sql_string, list):
