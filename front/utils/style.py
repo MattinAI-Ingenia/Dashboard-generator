@@ -141,5 +141,39 @@ def load_style():
             color: white !important;
             font-weight: 600;
         }
+
+        /* Chat button */ 
+        .chat-fab {
+            position: fixed;
+            bottom: 24px;
+            right: 24px;
+            z-index: 9999;
+        }
+        .chat-fab button {
+            width: 56px !important;
+            height: 56px !important;
+            border-radius: 50% !important;
+            font-size: 24px !important;
+            padding: 0 !important;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3) !important;
+        }
+        .chat-modal {
+            position: fixed;
+            bottom: 90px;
+            right: 24px;
+            color: #e0e0e0;
+            width: 500px;
+            height: 800px;
+            background: #1e1e2e;
+            border-radius: 12px;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.2);
+            z-index: 9998;
+            padding: 20px;
+        }
+        .stChatMessage {
+            font-size: 13px !important;
+            background: #2a2a3e !important;
+            color: #e0e0e0 !important;
+        }
     </style>
     """, unsafe_allow_html=True)

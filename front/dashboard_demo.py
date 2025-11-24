@@ -8,6 +8,7 @@ import time
 from typing import Dict, List, Any
 import plotly.express as px
 import re
+from streamlit_float import float_init, float_parent
 
 from utils.dashboard_api import DashboardApi
 from utils.style import load_style
@@ -18,6 +19,9 @@ dash_api = DashboardApi()
 
 # CSS
 load_style()
+
+# Initialize float layout
+float_init()
 
 # ===== AUTHENTICATION =====
 def login_page():
@@ -141,6 +145,10 @@ def init_session_state():
         st.session_state.editing_viz_id = None
     if 'edit_query' not in st.session_state:
         st.session_state.edit_query = ""
+    if 'show_chat' not in st.session_state:
+        st.session_state.show_chat = False
+    if 'chat_messages' not in st.session_state:
+        st.session_state.chat_messages = []
 
 init_session_state()
 
@@ -630,7 +638,10 @@ with st.sidebar:
     if st.button("🚪 Logout", use_container_width=True):
         st.session_state.clear()
         st.rerun()
-    
+    st.divider()
+
+    if st.button("💬 Chat Assistant", use_container_width=True):
+        st.session_state.show_chat = not st.session_state.show_chat
     st.divider()
 
     # Navigation menu
@@ -692,6 +703,32 @@ with st.sidebar:
         st.info("No dashboard selected")
     
     st.divider()
+
+# Chat modal
+if st.session_state.show_chat:
+    chat_container = st.container()
+    with chat_container:
+        col1, col2 = st.columns([5, 1])
+        with col1:
+            st.markdown("#### 💬 AI Assistant")
+        with col2:
+            if st.button("✕", key="close_chat"):
+                st.session_state.show_chat = False
+                st.rerun()
+        
+        msg_box = st.container(height=500)
+        with msg_box:
+            for msg in st.session_state.chat_messages:
+                with st.chat_message(msg["role"]):
+                    st.write(msg["content"])
+        
+        if prompt := st.chat_input("Ask me to create visualizations..."):
+            st.session_state.chat_messages.append({"role": "user", "content": prompt})
+            response = dash_api.process_chat_command(prompt)
+            st.session_state.chat_messages.append({"role": "assistant", "content": response})
+            st.rerun()
+    
+    chat_container.float("position: fixed; bottom: 20px; right: 20px; width: 550px; background: #1e1e2e; border-radius: 12px; padding: 20px; box-shadow: 0 8px 32px rgba(0,0,0,0.2); z-index: 9999;")
 
 # Main content area
 if st.session_state.current_page == "generate":
