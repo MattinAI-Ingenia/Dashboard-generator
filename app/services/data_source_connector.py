@@ -198,11 +198,11 @@ class DataSourceConnector:
             collections = []
             for collection_name in db.list_collection_names():
                 collection = db[collection_name]
-                
-                # Get document count
                 doc_count = collection.count_documents({})
                 
-                # Sample a document to infer schema
+                if doc_count == 0:
+                    continue
+                
                 sample_doc = collection.find_one()
                 columns = []
                 
@@ -216,18 +216,22 @@ class DataSourceConnector:
                 
                 collections.append({
                     "name": collection_name,
-                    "columns": columns,
-                    "row_count": doc_count
+                    "fields": columns
                 })
-            
-            return {"tables": collections}
+            logger.info(f"Extracted {len(collections)} collections from MongoDB database '{database}'")
+            return {
+                "databases": [{
+                    "database_name": database,
+                    "collections": collections
+                }]
+            }
             
         except Exception as e:
             raise Exception(f"MongoDB schema extraction failed: {str(e)}")
         finally:
             if client:
                 client.close()
-    
+
     def _build_sql_connection_url(self) -> str:
         """Build SQL connection URL from connection info"""
         info = self.connection_info

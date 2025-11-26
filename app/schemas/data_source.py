@@ -60,10 +60,6 @@ class TableInfo(BaseModel):
     row_count: Optional[int] = None
     description: Optional[str] = None
 
-class DataSourceSchema(BaseModel):
-    last_updated: Optional[datetime] = None
-    tables: List[TableInfo] = []
-
 class DataSourceInDB(BaseModel):
     id: int
     user_id: int
@@ -110,3 +106,41 @@ class DataSourceResponse(DataSourceInDB):
                 safe_info[key] = "***"
         
         return safe_info
+
+class ColumnSchema(BaseModel):
+    name: str
+    type: str
+    primary_key: Optional[bool] = False
+    nullable: Optional[bool] = True
+
+class ForeignKey(BaseModel):
+    columns: List[str]
+    references: Dict[str, Any]
+
+class TableSchema(BaseModel):
+    name: str
+    columns: List[ColumnSchema]
+    foreign_keys: Optional[List[ForeignKey]] = []
+    is_view: Optional[bool] = False
+    row_count: Optional[int] = None
+
+class CollectionSchema(BaseModel):
+    name: str
+    fields: List[ColumnSchema]  # "fields" en vez de "columns"
+    document_count: Optional[int] = None
+
+class DatabaseSchema(BaseModel):
+    database_name: str  # "database_name" en vez de "schema_name"
+    collections: List[CollectionSchema]  # "collections" en vez de "tables"
+
+class SchemaData(BaseModel):
+    schema_name: str
+    tables: List[TableSchema]
+    views: Optional[List[TableSchema]] = []
+
+class DataSourceSchema(BaseModel):
+    last_updated: Optional[datetime]
+    # SQL
+    schemas: Optional[List[SchemaData]] = []
+    # MongoDB
+    databases: Optional[List[DatabaseSchema]] = []

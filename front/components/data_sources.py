@@ -38,18 +38,70 @@ def manage_data_sources(user_id: int):
                     
                     with col2:
                         if st.button("🔍 View Schema", key=f"schema_{ds['id']}"):
-                            schema = dash_api.call_api(f"/data-sources/{ds['id']}/schema")
-                            if schema and schema.get('tables'):
-                                st.subheader("Database Schema")
-                                for table in schema['tables']:
-                                    st.write(f"**{table['name']}** ({table.get('row_count', 'Unknown')} rows)")
-                                    cols_text = ", ".join([col['name'] for col in table['columns']])
-                                    st.caption(f"Columns: {cols_text}")
-                    
+                            schema = dash_api.call_api(f"/data-sources/{ds['id']}/schema?refresh=true")
+                            
+                            with st.expander("📊 Schema", expanded=True):
+                                # SQL Databases
+                                if schema.get('schemas'):
+                                    for schema_info in schema['schemas']:
+                                        st.subheader(f"Schema: {schema_info['schema_name']}")
+                                        
+                                        if schema_info.get('tables'):
+                                            st.write("**📋 Tables:**")
+                                            for table in schema_info['tables']:
+                                                col1, col2 = st.columns([3, 1])
+                                                with col1:
+                                                    st.write(f"🔹 **{table['name']}**")
+                                                with col2:
+                                                    if table.get('row_count'):
+                                                        st.caption(f"{table['row_count']:,} rows")
+                                                
+                                                cols_df = [{
+                                                    'Column': col['name'],
+                                                    'Type': col['type'],
+                                                    'PK': '🔑' if col.get('primary_key') else '',
+                                                } for col in table['columns']]
+                                                
+                                                st.dataframe(cols_df, hide_index=True, use_container_width=True)
+                                                
+                                                if table.get('foreign_keys'):
+                                                    st.caption(f"🔗 {len(table['foreign_keys'])} foreign key(s)")
+                                                
+                                                st.divider()
+                                        
+                                        if schema_info.get('views'):
+                                            st.write("**👁️ Views:**")
+                                            for view in schema_info['views']:
+                                                st.write(f"🔹 {view['name']} ({len(view['columns'])} columns)")
+                                
+                                # MongoDB Databases
+                                if schema.get('databases'):
+                                    for db_info in schema['databases']:
+                                        st.subheader(f"Database: {db_info['database_name']}")
+                                        
+                                        if db_info.get('collections'):
+                                            st.write("**📚 Collections:**")
+                                            for collection in db_info['collections']:
+                                                col1, col2 = st.columns([3, 1])
+                                                with col1:
+                                                    st.write(f"🔹 **{collection['name']}**")
+                                                with col2:
+                                                    if collection.get('document_count'):
+                                                        st.caption(f"{collection['document_count']:,} docs")
+                                                
+                                                fields_df = [{
+                                                    'Field': field['name'],
+                                                    'Type': field['type'],
+                                                } for field in collection['fields']]
+                                                
+                                                st.dataframe(fields_df, hide_index=True, use_container_width=True)
+                                                st.divider()
+
                     with col3:
                         if st.button("🗑️ Delete", key=f"delete_{ds['id']}", type="secondary"):
                             if dash_api.call_api(f"/data-sources/{ds['id']}", method="DELETE") is not None:
                                 st.success("Data source deleted!")
+                                time.sleep(2)
                                 st.rerun()
         else:
             st.info("No data sources found. Add your first data source in the 'Add Source' tab.")
