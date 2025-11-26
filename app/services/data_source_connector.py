@@ -83,11 +83,11 @@ class DataSourceConnector:
                 "error": f"MongoDB connection failed: {str(e)}"
             }
     
-    async def get_schema(self, include_views: bool = True, only_with_data: bool = True) -> Optional[Dict[str, Any]]:
+    async def get_schema(self, schema: Optional[str] = None) -> Optional[Dict[str, Any]]:
         """Get schema information from the data source"""
         try:
             if self.type in ["postgresql", "mysql", "sqlite"]:
-                return await self._get_sql_schema()
+                return await self._get_sql_schema(schema=schema)
             elif self.type == "mongodb":
                 return await self._get_mongodb_schema()
             else:
@@ -96,57 +96,80 @@ class DataSourceConnector:
             logger.error(f"Schema extraction failed: {str(e)}")
             return None
     
-    async def _get_sql_schema(self) -> Dict[str, Any]:
+    async def _get_sql_schema(self, schema: Optional[str] = None) -> Dict[str, Any]:
         """Get SQL database schema - optimized"""
         connection_url = self._build_sql_connection_url()
         engine = create_engine(connection_url)
-        
         inspector = inspect(engine)
-        tables = []
-        views = []
-        
-        for table_name in inspector.get_table_names():
-            columns = []
-            pk_constraint = inspector.get_pk_constraint(table_name)
-            pk_columns = pk_constraint['constrained_columns'] if pk_constraint else []
-            
-            for column in inspector.get_columns(table_name):
-                col_info = {
-                    "name": column["name"],
-                    "type": str(column["type"])
-                }
-                
-                # Only add key status if it's a primary key
-                if column["name"] in pk_columns:
-                    col_info["primary_key"] = True
+
+         # Get all schemas or specific schema
+        schemas_to_process = [schema] if schema else inspector.get_schema_names()
+        system_schemas = ['information_schema', 'pg_catalog', 'mysql', 'sys']
+
+        all_schemas = []
+        for schema_name in schemas_to_process:
+            if schema_name in system_schemas:
+                continue
+
+            # Extract tables
+            tables = []
+            with engine.connect() as conn:
+                for table_name in inspector.get_table_names(schema=schema_name):                    
+                    # Skip empty tables
+                    result = conn.execute(text(f"SELECT 1 FROM {schema_name}.{table_name} LIMIT 1"))
+                    if not result.fetchone():
+                        continue 
+
+                    pk_constraint = inspector.get_pk_constraint(table_name, schema=schema_name)
+                    pk_columns = pk_constraint['constrained_columns'] if pk_constraint else []
                     
-                columns.append(col_info)
-            
-            # Get foreign keys
-            foreign_keys = []
-            for fk in inspector.get_foreign_keys(table_name):
-                foreign_keys.append({
-                    "columns": fk['constrained_columns'],
-                    "references": {
-                        "table": fk['referred_table'],
-                        "columns": fk['referred_columns']
-                    }
-                })
-            
-            table_info = {
-                "name": table_name,
-                "columns": columns
-            }
-            
-            if foreign_keys:
-                table_info["foreign_keys"] = foreign_keys
+                    columns = [
+                        {
+                            "name": col["name"],
+                            "type": str(col["type"]),
+                            **({"primary_key": True} if col["name"] in pk_columns else {})
+                        }
+                        for col in inspector.get_columns(table_name, schema=schema_name)
+                    ]
+                    
+                    # Get foreign keys
+                    foreign_keys = [
+                        {
+                            "columns": fk['constrained_columns'],
+                            "references": {"table": fk['referred_table'], "columns": fk['referred_columns']}
+                        }
+                        for fk in inspector.get_foreign_keys(table_name, schema=schema_name)
+                    ]
+                    
+                    table_info = {"name": table_name, "columns": columns}
+                    
+                    if foreign_keys:
+                        table_info["foreign_keys"] = foreign_keys
+                        
+                    tables.append(table_info)
                 
-            tables.append(table_info)
-        
-        return {
-            "schema_name": inspector.default_schema_name,
-            "tables": tables
-            }
+            # Get views if requested
+            views = []
+            try:
+                for view_name in inspector.get_view_names(schema=schema_name):
+                    view_columns = []
+                    for column in inspector.get_columns(view_name, schema=schema_name):
+                        view_columns.append({
+                            "name": column["name"],
+                            "type": str(column["type"])
+                        })
+                    views.append({"name": view_name, "columns": view_columns, "is_view": True})
+            except Exception:
+                pass
+
+            # Only add schema if it has tables or views
+            if tables or views:
+                schema_info = {"schema_name": schema_name, "tables": tables}
+                if views:
+                    schema_info["views"] = views
+                all_schemas.append(schema_info)
+
+        return {"schemas": all_schemas}
     
     async def _get_mongodb_schema(self) -> Dict[str, Any]:
         """Get MongoDB schema (collection info)"""
