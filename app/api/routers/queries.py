@@ -204,6 +204,8 @@ async def execute_query(
                 validation_response = await ai_client.chat(
                     message=validation_prompt,
                     app_id=1,
+                    conversation_id=None,
+                    user_id=None,
                     agent_id=6
                 )
                 
@@ -252,6 +254,8 @@ async def execute_query(
                     regenerated_response = await ai_client.chat(
                         message=regeneration_prompt,
                         app_id=1,
+                        conversation_id=None,
+                        user_id=None,
                         agent_id=1
                     )
                     
@@ -282,6 +286,8 @@ async def execute_query(
                     regenerated_response = await ai_client.chat(
                         message=regeneration_prompt,
                         app_id=1,
+                        conversation_id=None,
+                        user_id=None,
                         agent_id=5
                     )
                 

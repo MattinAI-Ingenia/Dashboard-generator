@@ -244,6 +244,13 @@ def _render_viz_content(viz: Dict[str, Any], show_controls: bool = False):
     x_col_viz = viz['x_column_query']
     y_col_viz = viz['y_column_query']
 
+    # After getting x_col_viz and y_col_viz, add this:
+    if ',' in str(x_col_viz):
+        # Combine multiple x columns into one
+        x_cols = [col.strip() for col in x_col_viz.split(',')]
+        df['combined_route'] = df[x_cols].apply(lambda row: ' → '.join(row.values.astype(str)), axis=1)
+        x_col_viz = 'combined_route'
+
     # Create compact visualization
     if viz['type'] == 'barchart':
         fig = px.bar(df, x=x_col_viz, y=y_col_viz)

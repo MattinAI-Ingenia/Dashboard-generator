@@ -86,6 +86,8 @@ async def generate_sql_from_nlp(
         logger.info(f"Extracting metadata for query: {request.query}")
         metadata_response = await ai_client.chat(
             message=prompt_message,
+            user_id=None,
+            conversation_id=None,
             agent_id=3, 
             app_id=1    
         )
@@ -117,6 +119,8 @@ Select the most appropriate datasource for a user query.
         # logger.info(f"Prompt message for datasource selection: {prompt_message}")
         selected_datasource = await ai_client.chat(
             message=prompt_message,
+            conversation_id=None,
+            user_id=None,
             agent_id=2, 
             app_id=1    
         )
@@ -170,8 +174,10 @@ Select the most appropriate datasource for a user query.
 
             generated_sql = await ai_client.chat(
                 message=prompt_message,
+                conversation_id=None,
                 app_id=1,
-                agent_id=10
+                user_id=None,
+                agent_id=1
             )
 
         elif database_type.lower() == "mongodb":
@@ -193,7 +199,9 @@ Select the most appropriate datasource for a user query.
 
             generated_sql = await ai_client.chat(
                 message=prompt_message,
+                conversation_id=None,
                 app_id=1,
+                user_id=None,
                 agent_id=5
             )
 
@@ -332,6 +340,8 @@ async def edit_visualization_query(
 
         Generate updated title, description, chart_type, and config if needed.""",
             agent_id=3,
+            conversation_id=None,
+            user_id=None,
             app_id=1
         )
 
@@ -367,8 +377,8 @@ Generate the updated query maintaining the same output structure.
 """
         
         # Call appropriate agent
-        agent_id = 5 if database_type == "mongodb" else 10
-        generated = await ai_client.chat(message=prompt, app_id=1, agent_id=agent_id)
+        agent_id = 5 if database_type == "mongodb" else 1
+        generated = await ai_client.chat(message=prompt, app_id=1, conversation_id=None, user_id=None, agent_id=agent_id)
         parsed = json.loads(generated.get("response", "{}"))
         logger.info(f"generated edited query: {parsed}")
 

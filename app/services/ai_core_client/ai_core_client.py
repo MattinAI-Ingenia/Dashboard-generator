@@ -117,7 +117,6 @@ class AICoreClient:
             logger.error(f"Request error to AI service: {str(e)}")
             raise
 
-
     async def reset_chat(self, conversation_id: str, agent_id: int, app_id: int) -> str:
         """
         Reset chat session in AI service
