@@ -1,0 +1,18 @@
+# app/schemas/chat.py
+from pydantic import BaseModel, Field
+from typing import Optional, Dict, Any
+
+class ChatRequest(BaseModel):
+    query: str = Field(..., min_length=1, description="Natural language query")
+    conversation_id: Optional[str] = Field(None, description="ID of the conversation context")
+
+class ChatResetRequest(BaseModel):
+    agent_id: int = Field(..., description="ID of the chat agent to reset")
+    app_id: int = Field(..., description="ID of the application")
+    conversation_id: Optional[str] = Field(None, description="ID of the conversation to reset")
+
+class ChatResponse(BaseModel):
+    response: str = Field(..., description="Response from chat agent")
+
+class ChatResetResponse(BaseModel):
+    message: str

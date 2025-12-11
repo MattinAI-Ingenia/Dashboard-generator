@@ -724,8 +724,9 @@ if st.session_state.show_chat:
         
         if prompt := st.chat_input("Ask me to create visualizations..."):
             st.session_state.chat_messages.append({"role": "user", "content": prompt})
-            response = dash_api.process_chat_command(prompt)
-            st.session_state.chat_messages.append({"role": "assistant", "content": response})
+            response = dash_api.chat_with_agent(prompt, conversation_id="12345")
+            assistant_message = response["response"]  # Extract the text
+            st.session_state.chat_messages.append({"role": "assistant", "content": assistant_message})
             st.rerun()
     
     chat_container.float("position: fixed; bottom: 20px; right: 20px; width: 550px; background: #1e1e2e; border-radius: 12px; padding: 20px; box-shadow: 0 8px 32px rgba(0,0,0,0.2); z-index: 9999;")

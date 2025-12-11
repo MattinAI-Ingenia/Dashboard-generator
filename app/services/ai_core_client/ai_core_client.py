@@ -40,7 +40,7 @@ class AICoreClient:
     """Client for external AI service that generates and validates SQL"""
     
     def __init__(self, base_url: str = None, timeout: int = 30):
-        self.base_url = base_url or settings.AI_CORE_URL
+        self.base_url = "http://172.16.59.1:8083"
         self.timeout = settings.AI_CORE_TIMEOUT or timeout
         self.client = httpx.AsyncClient(
             base_url=self.base_url,
@@ -51,7 +51,42 @@ class AICoreClient:
             }
         )
 
-    async def chat(self, message: str, agent_id: int, app_id: int) -> str:
+    async def chat(self, message: str, conversation_id: str, agent_id: int, app_id: int) -> str:
+        """
+        Send chat messages to AI service and get response
+        
+        Args:
+            message: Message content to send
+            
+        Returns:
+            AI-generated response string
+            
+        Raises:
+            httpx.HTTPError: If request fails
+        """
+        payload = {
+            "message": message,
+            **({"conversation_id": conversation_id} if conversation_id else {})
+        }      
+
+        logger.info(f"Preparing chat request for agent_id={agent_id}, app_id={app_id} \n")
+        # logger.info(f"Payload: {payload}")
+
+        try:
+            response = await self.client.post(f"/public/v1/app/{app_id}/chat/{agent_id}/call", json=payload)
+            response.raise_for_status()
+            data = response.json()
+            logger.info(f"Received chat response from AI service {data}.")
+            return data
+            
+        except httpx.HTTPStatusError as e:
+            logger.error(f"HTTP error from AI service: {e.response.status_code} - {e.response.text}")
+            raise
+        except httpx.RequestError as e:
+            logger.error(f"Request error to AI service: {str(e)}")
+            raise
+
+    async def chat_memory(self, message: str, agent_id: int, app_id: int) -> str:
         """
         Send chat messages to AI service and get response
         
@@ -73,6 +108,40 @@ class AICoreClient:
             response.raise_for_status()
             data = response.json()
             logger.info("Received chat response from AI service.")
+            return data
+            
+        except httpx.HTTPStatusError as e:
+            logger.error(f"HTTP error from AI service: {e.response.status_code} - {e.response.text}")
+            raise
+        except httpx.RequestError as e:
+            logger.error(f"Request error to AI service: {str(e)}")
+            raise
+
+
+    async def reset_chat(self, conversation_id: str, agent_id: int, app_id: int) -> str:
+        """
+        Reset chat session in AI service
+        
+        Args:
+            conversation_id: ID of the conversation to reset
+            
+        Returns:
+            Confirmation message from AI service
+            
+        Raises:
+            httpx.HTTPError: If request fails
+        """
+        params = {}
+        if conversation_id:
+            params["conversation_id"] = conversation_id
+            
+        logger.info(f"Preparing reset chat request for agent_id={agent_id}, app_id={app_id} \n")
+
+        try:
+            response = await self.client.post(f"/public/v1/app/{app_id}/chat/{agent_id}/reset", params=params)
+            response.raise_for_status()
+            data = response.json()
+            logger.info("Chat session reset successfully in AI service.")
             return data
             
         except httpx.HTTPStatusError as e:

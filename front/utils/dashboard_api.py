@@ -33,6 +33,20 @@ class DashboardApi:
             st.error(f"Connection Error: {str(e)}")
             return None
 
+    # CHAT
+    def chat_with_agent(self, query: str, conversation_id: str = None) -> Dict[str, Any]:
+        """Send chat query to backend API and get response"""
+        request_payload = {
+            "query": query,
+            "conversation_id": conversation_id
+        }
+        try:
+            result = self.call_api("/chat/", method="POST", data=request_payload)
+            return result if result else {}
+        except Exception as e:
+            st.error(f"Failed to chat with agent: {str(e)}")
+            return {}
+
     # DASHBOARD
     def save_dashboard_to_api(self, dashboard: Dict[str, Any], user_id: int) -> Dict[str, Any]:
         """Save dashboard to backend API"""
@@ -270,8 +284,7 @@ class DashboardApi:
             return result
         except Exception as e:
             st.error(f"Failed to generate SQL from NLP: {str(e)}")
-            return {}
-        
+            return {}    
 
     def edit_visualization(self, original_viz: Dict[str, Any], edit_instructions: str) -> Dict[str, Any]:
         """Edit visualization via backend"""
