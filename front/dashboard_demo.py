@@ -708,10 +708,15 @@ with st.sidebar:
 if st.session_state.show_chat:
     chat_container = st.container()
     with chat_container:
-        col1, col2 = st.columns([5, 1])
+        col1, col2, col3 = st.columns([4, 1, 1])
         with col1:
             st.markdown("#### 💬 AI Assistant")
         with col2:
+            if st.button("🔄", key="reset_chat", help="Reset conversation"):
+                dash_api.reset_chat_session(conversation_id="12345", app_id=1, agent_id=11)
+                st.session_state.chat_messages = []
+                st.rerun()
+        with col3:
             if st.button("✕", key="close_chat"):
                 st.session_state.show_chat = False
                 st.rerun()
@@ -724,13 +729,13 @@ if st.session_state.show_chat:
         
         if prompt := st.chat_input("Ask me to create visualizations..."):
             st.session_state.chat_messages.append({"role": "user", "content": prompt})
-            response = dash_api.chat_with_agent(prompt, conversation_id="12345")
-            assistant_message = response["response"]  # Extract the text
+            response = dash_api.chat_with_agent(prompt, conversation_id="12345", user_id=st.session_state.user_id)
+            assistant_message = response["response"]
             st.session_state.chat_messages.append({"role": "assistant", "content": assistant_message})
             st.rerun()
     
     chat_container.float("position: fixed; bottom: 20px; right: 20px; width: 550px; background: #1e1e2e; border-radius: 12px; padding: 20px; box-shadow: 0 8px 32px rgba(0,0,0,0.2); z-index: 9999;")
-
+    
 # Main content area
 if st.session_state.current_page == "generate":
     st.title("🚀 Dashboard Generator")

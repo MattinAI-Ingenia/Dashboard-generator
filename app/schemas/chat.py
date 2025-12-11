@@ -5,6 +5,7 @@ from typing import Optional, Dict, Any
 class ChatRequest(BaseModel):
     query: str = Field(..., min_length=1, description="Natural language query")
     conversation_id: Optional[str] = Field(None, description="ID of the conversation context")
+    user_id: Optional[int] = Field(None, description="ID of the user making the request")
 
 class ChatResetRequest(BaseModel):
     agent_id: int = Field(..., description="ID of the chat agent to reset")

@@ -32,7 +32,8 @@ async def chat_with_agent(
         message=request.query,
         conversation_id=request.conversation_id if request.conversation_id else None,
         agent_id=11, 
-        app_id=1    
+        app_id=1,
+        user_id=request.user_id if request.user_id else None
     )
     print("Metadata response:", metadata_response)
     # Extract just the response text

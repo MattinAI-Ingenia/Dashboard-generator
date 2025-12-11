@@ -51,7 +51,7 @@ class AICoreClient:
             }
         )
 
-    async def chat(self, message: str, conversation_id: str, agent_id: int, app_id: int) -> str:
+    async def chat(self, message: str, conversation_id: str, agent_id: int, app_id: int, user_id: int = None) -> str:
         """
         Send chat messages to AI service and get response
         
@@ -65,7 +65,7 @@ class AICoreClient:
             httpx.HTTPError: If request fails
         """
         payload = {
-            "message": message,
+            "message": f"[USER_ID: {user_id}] {message}",
             **({"conversation_id": conversation_id} if conversation_id else {})
         }      
 

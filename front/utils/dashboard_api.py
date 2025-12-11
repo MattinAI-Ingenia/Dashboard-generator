@@ -34,17 +34,32 @@ class DashboardApi:
             return None
 
     # CHAT
-    def chat_with_agent(self, query: str, conversation_id: str = None) -> Dict[str, Any]:
+    def chat_with_agent(self, query: str, conversation_id: str = None, user_id: int = None) -> Dict[str, Any]:
         """Send chat query to backend API and get response"""
         request_payload = {
             "query": query,
-            "conversation_id": conversation_id
+            "conversation_id": conversation_id,
+            "user_id": user_id
         }
         try:
             result = self.call_api("/chat/", method="POST", data=request_payload)
             return result if result else {}
         except Exception as e:
             st.error(f"Failed to chat with agent: {str(e)}")
+            return {}
+
+    def reset_chat_session(self, agent_id: int, app_id: int, conversation_id: str = None) -> Dict[str, Any]:
+        """Reset chat session via backend API"""
+        request_payload = {
+            "agent_id": agent_id,
+            "app_id": app_id,
+            "conversation_id": conversation_id
+        }
+        try:
+            result = self.call_api("/chat/reset", method="POST", data=request_payload)
+            return result if result else {}
+        except Exception as e:
+            st.error(f"Failed to reset chat session: {str(e)}")
             return {}
 
     # DASHBOARD
