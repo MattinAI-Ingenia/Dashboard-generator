@@ -64,13 +64,14 @@ class AICoreClient:
         Raises:
             httpx.HTTPError: If request fails
         """
-        payload = {
-            "message": f"[USER_ID: {user_id}] {message}",
-            **({"conversation_id": conversation_id} if conversation_id else {})
-        }      
+        enriched_message = f"[USER_ID: {user_id}] {message}" if user_id else message
 
-        logger.info(f"Preparing chat request for agent_id={agent_id}, app_id={app_id} \n")
-        # logger.info(f"Payload: {payload}")
+        payload = {
+        "message": enriched_message,
+        **({"conversation_id": conversation_id} if conversation_id else {})
+        } 
+
+        logger.info(f"Preparing chat request for agent_id={agent_id}, app_id={app_id}")
 
         try:
             response = await self.client.post(f"/public/v1/app/{app_id}/chat/{agent_id}/call", json=payload)

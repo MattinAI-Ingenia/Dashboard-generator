@@ -10,6 +10,8 @@ class VisualizationData(BaseModel):
     data_source: str
     query: Dict[str, Any]  # e.g. {"statement": "...", "type": "sql"}
     original_query: str
+    description: Optional[str] = ""  
+    created_at: Optional[str] = None 
     edit_history: Optional[List[Any]] = []
     query_config: Dict[str, Any] = {}
     config: Dict[str, Any] = {}

@@ -34,13 +34,15 @@ class DashboardApi:
             return None
 
     # CHAT
-    def chat_with_agent(self, query: str, conversation_id: str = None, user_id: int = None) -> Dict[str, Any]:
+    def chat_with_agent(self, query: str, conversation_id: str = None, user_id: int = None, dashboard_context: Dict = None) -> Dict[str, Any]:
         """Send chat query to backend API and get response"""
         request_payload = {
             "query": query,
             "conversation_id": conversation_id,
-            "user_id": user_id
+            "user_id": user_id,
+            "context": dashboard_context
         }
+
         try:
             result = self.call_api("/chat/", method="POST", data=request_payload)
             return result if result else {}

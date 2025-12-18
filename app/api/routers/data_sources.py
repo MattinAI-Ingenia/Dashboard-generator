@@ -71,6 +71,7 @@ def list_data_sources(
 @router.post("/", status_code=status.HTTP_201_CREATED, response_model=DataSourceResponse)
 async def add_data_source(
     data_source_config: DataSourceConfig,
+    schema: Optional[str] = None,
     db: Session = Depends(get_db),
     user_id: int = Query(...)
 ):
@@ -80,7 +81,6 @@ async def add_data_source(
     Creates a new data source connection and tests connectivity.
     """
     try:
-        print(data_source_config)
         # Test connection before creating
         connector = DataSourceConnector({
             "type": data_source_config.type.value,  
@@ -118,7 +118,7 @@ async def add_data_source(
         
         # Get initial schema information
         try:
-            schema_info = await connector.get_schema()
+            schema_info = await connector.get_schema(schema=schema)
             print(schema_info)
             if schema_info:
                 # Update with schema information
@@ -227,6 +227,7 @@ async def get_data_source_schema(
     - **refresh**: If true, fetches fresh schema from the data source
     """
     data_source = data_source_repository.get(db, id=data_source_id)
+
     if not data_source:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -276,7 +277,8 @@ async def get_data_source_schema(
         
         return DataSourceSchema(
             last_updated=data_source.schema_updated_at,
-            tables=schema_data.get("tables", [])
+            schemas=schema_data.get("schemas", []),
+            databases=schema_data.get("databases", [])  # MongoDB support
         )
     
     except HTTPException:

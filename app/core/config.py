@@ -18,7 +18,7 @@ class Settings(BaseSettings):
 
     # AI Core
     AI_CORE_URL: str = os.getenv("AI_CORE_URL", "http://localhost:8000")
-    AI_CORE_API_KEY: str = os.getenv("AI_CORE_API_KEY", "QJ0Md2O3t8DMjT3jU1CwVAuOPoOkYZIp")
+    AI_CORE_API_KEY: str = os.getenv("AI_CORE_API_KEY", "f79DffTYqUIsPnyIRVad0Kxl8Rhdx7qQ")
     AI_CORE_TIMEOUT: int = int(os.getenv("AI_CORE_TIMEOUT", 30))
 
     # LangFlow API

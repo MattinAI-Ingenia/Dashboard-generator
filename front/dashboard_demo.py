@@ -736,7 +736,47 @@ if st.session_state.show_chat:
         
         if prompt := st.chat_input("Ask me to create visualizations..."):
             st.session_state.chat_messages.append({"role": "user", "content": prompt})
-            response = dash_api.chat_with_agent(prompt, conversation_id="12345", user_id=st.session_state.user_id)
+            
+            # Prepare full dashboard context
+            dashboard_context = None
+            if st.session_state.current_dashboard:
+                dashboard_context = {
+                    "dashboard_id": st.session_state.current_dashboard.get("id"),
+                    "dashboard_name": st.session_state.current_dashboard.get("name"),
+                    "description": st.session_state.current_dashboard.get("description"),
+                    "visualizations": [
+                        {
+                            "id": viz.get("id"),
+                            "title": viz.get("result", {}).get("title"),
+                            "description": viz.get("result", {}).get("description"),
+                            "type": viz.get("type"),
+                            "chart_type": viz.get("result", {}).get("chart_type"),
+                            "data_source": viz.get("result", {}).get("data_source"),
+                            "original_query": viz.get("result", {}).get("original_user_query"),
+                            "x_column": viz.get("x_column"),
+                            "y_column": viz.get("y_column"),
+                            "edit_history": viz.get("result", {}).get("edit_history", [])
+                        }
+                        for viz in st.session_state.current_dashboard.get("visualizations", [])
+                    ]
+                }
+            
+            response = dash_api.chat_with_agent(
+                prompt, 
+                conversation_id="12345", 
+                user_id=st.session_state.user_id,
+                dashboard_context=dashboard_context  # Pass context
+            )
+
+            # ⭐ Recargar si hubo edición
+            if response.get("action_taken") == "visualization_edited":
+                if st.session_state.current_dashboard:
+                    fresh_dashboard = dash_api.load_dashboard_from_api(
+                        st.session_state.current_dashboard['id']
+                    )
+                    if fresh_dashboard:
+                        st.session_state.current_dashboard = load_dashboard_with_data(fresh_dashboard)
+
             assistant_message = response["response"]
             st.session_state.chat_messages.append({"role": "assistant", "content": assistant_message})
             st.rerun()
