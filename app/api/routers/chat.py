@@ -58,7 +58,7 @@ Visualizaciones en el dashboard:
     
     agent_response = metadata_response["response"]
     
-    edit_keywords = ["editada", "actualizada", "modificada", "ahora muestra", "han sido actualizados"]
+    edit_keywords = ["editada", "actualizada", "modificada", "ahora muestra", "han sido actualizados", "transformada"]
     action_taken = "visualization_edited" if any(kw in agent_response.lower() for kw in edit_keywords) else None
     
     return ChatResponse(
