@@ -211,22 +211,13 @@ async def generate_sql_from_nlp(
         #     # logger.info(f"Prompt message for SQL generation: {prompt_message}")
         #     logger.info(f"Generating SQL for PostgreSQL with prompt: {prompt_message}")
 
-<<<<<<< HEAD
-            generated_sql = await ai_client.chat(
-                message=prompt_message,
-                conversation_id=None,
-                app_id=1,
-                user_id=None,
-                agent_id=1
-            )
-=======
         #     generated_sql = await ai_client.chat(
         #         message=prompt_message,
         #         app_id=1,
         #         agent_id=10
         #     )
         #     logger.info(f"AI response for SQL generation: {generated_sql}")
->>>>>>> 9d5f2be (nlp modified and prompt folder added)
+
 
         # elif database_type.lower() == "mongodb":
 
@@ -245,21 +236,11 @@ async def generate_sql_from_nlp(
 
         #     logger.info(f"Prompt message for MongoDB query generation: {prompt_message}")
 
-<<<<<<< HEAD
-            generated_sql = await ai_client.chat(
-                message=prompt_message,
-                conversation_id=None,
-                app_id=1,
-                user_id=None,
-                agent_id=5
-            )
-=======
         #     generated_sql = await ai_client.chat(
         #         message=prompt_message,
         #         app_id=1,
         #         agent_id=5
         #     )
->>>>>>> 9d5f2be (nlp modified and prompt folder added)
 
 
         if not generated_sql:
