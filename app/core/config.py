@@ -18,19 +18,8 @@ class Settings(BaseSettings):
 
     # AI Core
     AI_CORE_URL: str = os.getenv("AI_CORE_URL", "http://localhost:8000")
-    AI_CORE_API_KEY: str = os.getenv("AI_CORE_API_KEY", "f79DffTYqUIsPnyIRVad0Kxl8Rhdx7qQ")
+    AI_CORE_API_KEY: str = os.getenv("AI_CORE_API_KEY", "123456789")
     AI_CORE_TIMEOUT: int = int(os.getenv("AI_CORE_TIMEOUT", 30))
-
-    # LangFlow API
-    LANGFLOW_API_URL: str = os.getenv("LANGFLOW_API_URL", "localhost:7860")
-    LANGFLOW_API_KEY: str = os.getenv("LANGFLOW_API_KEY", "sdfsfsd")
-    LANGFLOW_TIMEOUT: int = os.getenv("LANGFLOW_TIMEOUT", 420)
-    LANGFLOW_JOB_OFFER_SUMMARY_GENERATION_FLOW_ID: str = os.getenv("LANGFLOW_JOB_OFFER_SUMMARY_GENERATION_FLOW_ID", "")
-    LANGFLOW_JOB_OFFER_SKILLS_EXTRACTION_FLOW_ID: str= os.getenv("LANGFLOW_JOB_OFFER_SKILLS_EXTRACTION_FLOW_ID", "")
-    LANGFLOW_CANDIDATE_SUMMARY_GENERATION_FLOW_ID: str = os.getenv("LANGFLOW_CANDIDATE_SUMMARY_GENERATION_FLOW_ID", "")
-    LANGFLOW_CANDIDATE_SKILLS_EXTRACTION_FLOW_ID: str = os.getenv("LANGFLOW_CANDIDATE_SKILLS_EXTRACTION_FLOW_ID", "")
-    LANGFLOW_CANDIDATE_ANONYMIZATION_API_FLOW_ID: str = os.getenv("LANGFLOW_CANDIDATE_ANONYMIZATION_API_FLOW_ID", "")
-    LANGFLOW_JOB_OFFER_CANDIDATE_FIT_FLOW_ID: str = os.getenv("LANGFLOW_JOB_OFFER_CANDIDATE_FIT_FLOW_ID", "")
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
 
