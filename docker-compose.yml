@@ -18,6 +18,18 @@ services:
     networks:
       - app-network
 
+  test_postgres:
+    image: postgres:15
+    container_name: test_postgres
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: demo
+    ports:
+      - 5434:5432
+    networks:
+      - app-network
+
   demo-mongo:
     image: mongo:7
     environment:
@@ -27,7 +39,6 @@ services:
     ports:
       - "27018:27017"
     volumes:
-      - demo-mongo-data:/data/db
       - ./demo_data/mongo_init.js:/docker-entrypoint-initdb.d/init.js
     healthcheck:
       test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
@@ -46,17 +57,16 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+    environment:
+      - PYTHONPATH=/app/app
     env_file:
       - .env
-    volumes:
-      - ./app:/app
-      - /app/.venv
+    command: uv run uvicorn app.main:app --host 0.0.0.0 --port 8000 
     networks:
       - app-network
 
 volumes:
   postgres-data:
-  demo-mongo-data:
 
 networks:
   app-network:

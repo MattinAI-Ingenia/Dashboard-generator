@@ -1,4 +1,4 @@
-# Multi-stage Dockerfile optimized for uv
+# Multi-stage Dockerfile 
 FROM python:3.11-slim-bookworm AS base
 
 # Set environment variables for Python
@@ -69,6 +69,3 @@ ENV PATH="/app/.venv/bin:$PATH"
 
 # Expose port
 EXPOSE 8000
-
-# Default command (remove --reload for production)
-CMD ["uv", "run", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]

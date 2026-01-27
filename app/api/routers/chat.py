@@ -20,6 +20,52 @@ def get_ai_client() -> AICoreClient:
     return AICoreClient()
 
 
+# @router.post("/", response_model=ChatResponse)
+# async def chat_with_agent(
+#     request: ChatRequest,
+#     ai_client: AICoreClient = Depends(get_ai_client)
+# ) -> ChatResponse:
+#     """Chat with agent with optional dashboard context"""
+#     message = request.query
+
+#     # Enrich message with dashboard context if provided
+#     if request.context and request.context.get("dashboard_id"):
+#         context_info = f"""
+# ### CONTEXTO ACTUAL
+# Dashboard abierto: "{request.context['dashboard_name']}" (ID: {request.context['dashboard_id']})
+
+# Visualizaciones en el dashboard:
+# """
+#         for i, viz in enumerate(request.context['visualizations'], 1):
+#             context_info += f"""
+# {i}. "{viz['title']}" (ID: {viz['id']})
+#    - Tipo: {viz['chart_type']}
+#    - Fuente de datos: {viz['data_source']}
+#    - Consulta original: {viz['original_query']}
+#    - Ejes: X={viz['x_column']}, Y={viz['y_column']}
+#    - Historial de ediciones: {len(viz['edit_history'])} cambios
+# """
+        
+#         message = f"{context_info}\n\n### CONSULTA DEL USUARIO\n{request.query}"
+        
+#     metadata_response = await ai_client.chat(
+#         message=message,
+#         conversation_id=request.conversation_id,
+#         agent_id=11, 
+#         app_id=1,
+#         user_id=request.user_id
+#     )
+    
+#     agent_response = metadata_response["response"]
+    
+#     edit_keywords = ["editada", "actualizada", "modificada", "ahora muestra", "han sido actualizados", "transformada"]
+#     action_taken = "visualization_edited" if any(kw in agent_response.lower() for kw in edit_keywords) else None
+    
+#     return ChatResponse(
+#         response=agent_response,
+#         action_taken=action_taken 
+#     )
+
 @router.post("/", response_model=ChatResponse)
 async def chat_with_agent(
     request: ChatRequest,
@@ -58,8 +104,15 @@ Visualizaciones en el dashboard:
     
     agent_response = metadata_response["response"]
     
+    # Detect action type
     edit_keywords = ["editada", "actualizada", "modificada", "ahora muestra", "han sido actualizados", "transformada"]
-    action_taken = "visualization_edited" if any(kw in agent_response.lower() for kw in edit_keywords) else None
+    add_keywords = ["añadida", "agregada", "creada", "nueva visualización", "he añadido", "he agregado"]
+    
+    action_taken = None
+    if any(kw in agent_response.lower() for kw in edit_keywords):
+        action_taken = "visualization_edited"
+    elif any(kw in agent_response.lower() for kw in add_keywords):
+        action_taken = "visualization_added"
     
     return ChatResponse(
         response=agent_response,

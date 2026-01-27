@@ -768,8 +768,10 @@ if st.session_state.show_chat:
                 dashboard_context=dashboard_context  # Pass context
             )
 
+            action_taken = response.get("action_taken")
+
             # ⭐ Recargar si hubo edición
-            if response.get("action_taken") == "visualization_edited":
+            if action_taken in ["visualization_edited", "visualization_added"]:
                 if st.session_state.current_dashboard:
                     fresh_dashboard = dash_api.load_dashboard_from_api(
                         st.session_state.current_dashboard['id']
