@@ -33,6 +33,7 @@ async def execute_query(
     db: Session = Depends(get_db),
     ai_client: AICoreClient = Depends(get_ai_client)
 ):
+
     """
     Execute SQL/NoSQL query against data source and return results.
     Used by frontend for data preview and dashboard rendering.
@@ -46,6 +47,7 @@ async def execute_query(
         try:
             # Validate data source exists
             data_source = data_source_repository.get_by_name(db, name=request.data_source)
+            logging.info(f"EXISTE DATASOURCE: {data_source}")
 
             if not data_source:
                 raise HTTPException(

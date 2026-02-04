@@ -117,6 +117,7 @@ async def generate_sql_from_nlp(
         # Step 2: Extract metadata
         prompt_message = get_prompt("metadata_extraction", user_query=request.query)
         logger.info(f"Extracting metadata for query: {request.query}")
+        logger.info(f"Prompt message for metadata extraction: {prompt_message}")
         metadata_response = await ai_client.chat(
             message=prompt_message,
             user_id=None,
@@ -137,6 +138,7 @@ async def generate_sql_from_nlp(
         datasources_info = [
             {"name": ds.name, "schema": ds.schema_data} for ds in datasources
         ]
+        logger.info(f"Datasource info response: {datasources_info} \n")
 
         prompt_message = get_prompt("datasource_selection", datasources_info=json.dumps(datasources_info), user_query=request.query)
 
@@ -149,7 +151,7 @@ async def generate_sql_from_nlp(
             agent_id=12, 
             app_id=1    
         )
-        logger.info(f"AI response for SQL generation: {generated_sql}")
+        logger.info(f"AI response for SQL  or noSQL generation: {generated_sql}")
 
 
         # logger.info(f"Selecting datasource for query: {request.query}")
@@ -261,7 +263,7 @@ async def generate_sql_from_nlp(
         database_type= parsed_generated_sql.get("database_type")
         parsed_generated_sql.pop('database_type', None)
         # database_type="PostgreSQL"
-        print(database_type)
+     
         if database_type.lower() == "mongodb":
             # Return MongoDB result
             return NLPQueryResponse(
@@ -276,7 +278,7 @@ async def generate_sql_from_nlp(
                     title=parsed_metadata.get("title", ""),
                     description=parsed_metadata.get("description", ""),
                     # data_source=database_name,
-                    data_source= parsed_generated_sql.get("database_name"),
+                    data_source= parsed_generated_sql.get("datasource_name"),
                     chart_type=parsed_metadata.get("chart_type"),
                     config= parsed_metadata.get("config"),
                     query_config={

@@ -1,6 +1,7 @@
 # app/services/ai_core_client.py
 from pyexpat.errors import messages
 import httpx
+import json
 from typing import Dict, Any, Optional
 from pydantic import BaseModel
 import logging
@@ -46,7 +47,6 @@ class AICoreClient:
             base_url=self.base_url,
             timeout=self.timeout,
             headers={
-                "Content-Type": "application/json",
                 "X-API-KEY": settings.AI_CORE_API_KEY
             }
         )
@@ -64,17 +64,25 @@ class AICoreClient:
         Raises:
             httpx.HTTPError: If request fails
         """
+        import uuid
+        
         enriched_message = f"[USER_ID: {user_id}] {message}" if user_id else message
 
-        payload = {
-        "message": enriched_message,
-        **({"conversation_id": conversation_id} if conversation_id else {})
-        } 
+        # Use form data as expected by the server
+        # Always provide a conversation_id (server requires it)
+        form_data = {
+            "message": enriched_message,
+            "conversation_id": conversation_id or str(uuid.uuid4()),
+        }
 
         logger.info(f"Preparing chat request for agent_id={agent_id}, app_id={app_id}")
+        logger.info(f"Chat payload being sent: {form_data}")
 
         try:
-            response = await self.client.post(f"/public/v1/app/{app_id}/chat/{agent_id}/call", json=payload)
+            response = await self.client.post(
+                f"/public/v1/app/{app_id}/chat/{agent_id}/call",
+                data=form_data
+            )
             response.raise_for_status()
             data = response.json()
             logger.info(f"Received chat response from AI service {data}.")
