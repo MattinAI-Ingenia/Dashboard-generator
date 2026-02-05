@@ -103,6 +103,7 @@ Visualizaciones en el dashboard:
     )
     
     agent_response = metadata_response["response"]
+    returned_conversation_id = metadata_response.get("conversation_id")
     
     # Detect action type
     edit_keywords = ["editada", "actualizada", "modificada", "ahora muestra", "han sido actualizados", "transformada"]
@@ -116,6 +117,7 @@ Visualizaciones en el dashboard:
     
     return ChatResponse(
         response=agent_response,
+        conversation_id=returned_conversation_id,
         action_taken=action_taken 
     )
 

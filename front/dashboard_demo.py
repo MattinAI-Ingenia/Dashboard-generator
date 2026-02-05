@@ -149,6 +149,8 @@ def init_session_state():
         st.session_state.show_chat = False
     if 'chat_messages' not in st.session_state:
         st.session_state.chat_messages = []
+    if 'conversation_id' not in st.session_state:
+        st.session_state.conversation_id = None
 
 init_session_state()
 
@@ -720,8 +722,10 @@ if st.session_state.show_chat:
             st.markdown("#### 💬 AI Assistant")
         with col2:
             if st.button("🔄", key="reset_chat", help="Reset conversation"):
-                dash_api.reset_chat_session(conversation_id="12345", app_id=1, agent_id=11)
+                if st.session_state.conversation_id:
+                    dash_api.reset_chat_session(conversation_id=st.session_state.conversation_id, app_id=1, agent_id=11)
                 st.session_state.chat_messages = []
+                st.session_state.conversation_id = None  # Reset to start new conversation
                 st.rerun()
         with col3:
             if st.button("✕", key="close_chat"):
@@ -763,10 +767,14 @@ if st.session_state.show_chat:
             
             response = dash_api.chat_with_agent(
                 prompt, 
-                conversation_id="12345", 
+                conversation_id=st.session_state.conversation_id,  # Use stored ID or None for new conversation
                 user_id=st.session_state.user_id,
                 dashboard_context=dashboard_context  # Pass context
             )
+
+            # Store the conversation_id returned by the API for follow-up messages
+            if response.get("conversation_id"):
+                st.session_state.conversation_id = response.get("conversation_id")
 
             action_taken = response.get("action_taken")
 

@@ -15,6 +15,7 @@ class ChatResetRequest(BaseModel):
 
 class ChatResponse(BaseModel):
     response: str = Field(..., description="Response from chat agent")
+    conversation_id: Optional[str] = Field(None, description="Conversation ID to use for follow-up messages")
     action_taken: Optional[str] = None
 
 class ChatResetResponse(BaseModel):
