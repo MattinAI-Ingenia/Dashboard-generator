@@ -51,48 +51,43 @@ class AICoreClient:
             }
         )
 
-    async def chat(self, message: str, conversation_id: Optional[str], agent_id: int, app_id: int, user_id: int = None) -> Dict[str, Any]:
+    async def chat(self, message: str, conversation_id: str, agent_id: int, app_id: int, user_id: int = None) -> str:
         """
         Send chat messages to AI service and get response
-        
+       
         Args:
             message: Message content to send
-            conversation_id: Optional conversation ID. If None, a new conversation is created.
-            agent_id: The agent ID to call
-            app_id: The application ID
-            user_id: Optional user ID to include in message
-            
+           
         Returns:
-            Dict with response, conversation_id, and other metadata
-            
+            AI-generated response string
+           
         Raises:
             httpx.HTTPError: If request fails
         """
+        import uuid
+       
         enriched_message = f"[USER_ID: {user_id}] {message}" if user_id else message
-
+ 
+        # Use form data as expected by the server
+        # Always provide a conversation_id (server requires it)
+        form_data = {
+            "message": enriched_message,
+            "conversation_id": conversation_id or str(uuid.uuid4()),
+        }
+ 
         logger.info(f"Preparing chat request for agent_id={agent_id}, app_id={app_id}")
-        logger.info(f"Using conversation_id: {conversation_id}")
-
+        logger.info(f"Chat payload being sent: {form_data}")
+ 
         try:
-            # Build multipart data - only include conversation_id if provided
-            # If not provided, the API will create a new conversation and return its ID
-            multipart_data = {
-                "message": (None, enriched_message),
-            }
-            
-            # Only include conversation_id if we have one (for follow-up messages)
-            if conversation_id:
-                multipart_data["conversation_id"] = (None, conversation_id)
-            
             response = await self.client.post(
                 f"/public/v1/app/{app_id}/chat/{agent_id}/call",
-                files=multipart_data
+                data=form_data
             )
             response.raise_for_status()
             data = response.json()
-            logger.info(f"Received chat response from AI service. Conversation ID: {data.get('conversation_id')}")
+            logger.info(f"Received chat response from AI service {data}.")
             return data
-            
+           
         except httpx.HTTPStatusError as e:
             logger.error(f"HTTP error from AI service: {e.response.status_code} - {e.response.text}")
             raise

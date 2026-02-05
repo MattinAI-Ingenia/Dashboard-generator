@@ -122,16 +122,16 @@ async def generate_sql_from_nlp(
             message=prompt_message,
             user_id=None,
             conversation_id=None,
-            agent_id=3, 
+            agent_id=3,
             app_id=1    
         )
         metadata_response = metadata_response.get("response", "{}")
-
+ 
         try:
             parsed_metadata = json.loads(metadata_response)
         except json.JSONDecodeError:
             raise ValueError("AI response is not valid JSON")
-        
+       
         logger.info(f"Metadata extraction response: {parsed_metadata} \n")
 
         # Step 2: Select appropriate datasource
@@ -144,29 +144,10 @@ async def generate_sql_from_nlp(
 
         logger.info(f"Selecting datasource for query: {request.query}")
         logger.info(f"Prompt message for datasource selection: {prompt_message}")
-        # generated_sql = await ai_client.chat(
-        #     message=prompt_message,
-        #     conversation_id=None,
-        #     user_id=None,
-        #     agent_id=12, 
-        #     app_id=1    
-        # )
-        logger.info(f"AI response for SQL generation: {generated_sql}")
-        generated_sql = await ai_client.chat(
-            message=prompt_message,
-            conversation_id=None,
-            user_id=None,
-            agent_id=12, 
-            app_id=1    
-        )
-        logger.info(f"AI response for SQL  or noSQL generation: {generated_sql}")
-
-
-        logger.info(f"Selecting datasource for query: {request.query}")
-        logger.info(f"Prompt message for datasource selection: {prompt_message}")
         selected_datasource = await ai_client.chat(
             message=prompt_message,
-            agent_id=15, 
+            conversation_id=None,
+            agent_id=2, 
             app_id=1    
         )
         logger.info('--- Selected datasource response ---')
@@ -200,8 +181,9 @@ async def generate_sql_from_nlp(
         
         # Step 4: Call AI service to generate SQL
         logger.info(f"Generating SQL for datasource: {schema}")
-
+        logger.info(f"Selected datasource details {selected_datasource_details}")
         database_type = selected_datasource_details.type
+        logger.info(f"Selected datasource details {database_type}")
 
         if database_type.lower() == "postgresql":
 
@@ -223,8 +205,9 @@ async def generate_sql_from_nlp(
 
             generated_sql = await ai_client.chat(
                 message=prompt_message,
+                conversation_id=None,
                 app_id=1,
-                agent_id=10
+                agent_id=1
             )
             logger.info(f"AI response for SQL generation: {generated_sql}")
 
@@ -248,6 +231,7 @@ async def generate_sql_from_nlp(
 
             generated_sql = await ai_client.chat(
                 message=prompt_message,
+                conversation_id=None,
                 app_id=1,
                 agent_id=5
             )
@@ -268,9 +252,6 @@ async def generate_sql_from_nlp(
             raise ValueError("AI response is not valid JSON")
 
         logger.info(f"Parsed generated SQL response: {parsed_generated_sql} \nPreparing chat request for agent_i")
-        database_type= parsed_generated_sql.get("database_type")
-        parsed_generated_sql.pop('database_type', None)
-        # database_type="PostgreSQL"
      
         if database_type.lower() == "mongodb":
             # Return MongoDB result
@@ -285,8 +266,8 @@ async def generate_sql_from_nlp(
                     original_user_query=request.query,
                     title=parsed_metadata.get("title", ""),
                     description=parsed_metadata.get("description", ""),
-                    # data_source=database_name,
-                    data_source= parsed_generated_sql.get("datasource_name"),
+                    data_source=database_name,
+                    # data_source= parsed_generated_sql.get("datasource_name"),
                     chart_type=parsed_metadata.get("chart_type"),
                     config= parsed_metadata.get("config"),
                     query_config={
@@ -306,8 +287,8 @@ async def generate_sql_from_nlp(
                     original_user_query=request.query,
                     title=parsed_metadata.get("title", ""),
                     description=parsed_metadata.get("description", ""),
-                    # data_source=database_name,
-                    data_source= parsed_generated_sql.get("database_name"),
+                    data_source=database_name,
+                    # data_source= parsed_generated_sql.get("database_name"),
                     chart_type=parsed_metadata.get("chart_type"),
                     query_config={
                         "x_column": parsed_generated_sql.get("x_column"), 
