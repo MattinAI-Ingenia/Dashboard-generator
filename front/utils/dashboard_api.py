@@ -42,7 +42,7 @@ class DashboardApi:
             "user_id": user_id,
             "context": dashboard_context
         }
-
+        print(f"Sending request to /chat/: {request_payload}")
         try:
             result = self.call_api("/chat/", method="POST", data=request_payload)
             return result if result else {}
