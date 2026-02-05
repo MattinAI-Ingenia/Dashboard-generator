@@ -142,105 +142,105 @@ async def generate_sql_from_nlp(
 
         logger.info(f"Selecting datasource for query: {request.query}")
         logger.info(f"Prompt message for datasource selection: {prompt_message}")
-        generated_sql = await ai_client.chat(
-            message=prompt_message,
-            conversation_id=None,
-            user_id=None,
-            agent_id=12, 
-            app_id=1    
-        )
+        # generated_sql = await ai_client.chat(
+        #     message=prompt_message,
+        #     conversation_id=None,
+        #     user_id=None,
+        #     agent_id=12, 
+        #     app_id=1    
+        # )
         logger.info(f"AI response for SQL generation: {generated_sql}")
 
 
-        # logger.info(f"Selecting datasource for query: {request.query}")
-        # logger.info(f"Prompt message for datasource selection: {prompt_message}")
-        # selected_datasource = await ai_client.chat(
-        #     message=prompt_message,
-        #     agent_id=15, 
-        #     app_id=1    
-        # )
-        # logger.info('--- Selected datasource response ---')
-        # logger.info(f"Datasource selection response: {selected_datasource} \n")
-        # selected_datasource = selected_datasource.get("response", "{}")
-        # logger.info(f"selected_datasource: {selected_datasource} \n")
+        logger.info(f"Selecting datasource for query: {request.query}")
+        logger.info(f"Prompt message for datasource selection: {prompt_message}")
+        selected_datasource = await ai_client.chat(
+            message=prompt_message,
+            agent_id=15, 
+            app_id=1    
+        )
+        logger.info('--- Selected datasource response ---')
+        logger.info(f"Datasource selection response: {selected_datasource} \n")
+        selected_datasource = selected_datasource.get("response", "{}")
+        logger.info(f"selected_datasource: {selected_datasource} \n")
 
-        # try:
-        #     parsed_selected_datasource = json.loads(selected_datasource)
-        # except json.JSONDecodeError:
-        #     raise ValueError("AI response is not valid JSON")
+        try:
+            parsed_selected_datasource = json.loads(selected_datasource)
+        except json.JSONDecodeError:
+            raise ValueError("AI response is not valid JSON")
 
-        # logger.info(f"Parsed datasource selection response: {parsed_selected_datasource} \n")
+        logger.info(f"Parsed datasource selection response: {parsed_selected_datasource} \n")
 
-        # # Now safely access the database_name
-        # database_name = parsed_selected_datasource.get("database_name")
-        # logger
+        # Now safely access the database_name
+        database_name = parsed_selected_datasource.get("database_name")
+        logger.info(f"Selected database name: {database_name} \n")
 
-        # selected_datasource_details = data_source_repository.get_by_name(
-        #     db, name=database_name
-        # )
+        selected_datasource_details = data_source_repository.get_by_name(
+            db, name=database_name
+        )
 
-        # if not selected_datasource_details:
-        #     raise HTTPException(
-        #         status_code=status.HTTP_404_NOT_FOUND,
-        #         detail=f"Datasource {database_name} not found"
-        #     )
+        if not selected_datasource_details:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Datasource {database_name} not found"
+            )
         
-        # # Prepare schema for AI service
-        # schema = selected_datasource_details.schema_data or {}
+        # Prepare schema for AI service
+        schema = selected_datasource_details.schema_data or {}
         
-        # # Step 4: Call AI service to generate SQL
-        # # logger.info(f"Generating SQL for datasource: {schema}")
+        # Step 4: Call AI service to generate SQL
+        logger.info(f"Generating SQL for datasource: {schema}")
 
-        # database_type = selected_datasource_details.type
+        database_type = selected_datasource_details.type
 
-        # if database_type.lower() == "postgresql":
+        if database_type.lower() == "postgresql":
 
-        #     prompt_message = f"""
-        #         Generate a SQL query for resolving the user query.
+            prompt_message = f"""
+                Generate a SQL query for resolving the user query.
 
-        #         ### AVAILABLE DATASOURCE:
-        #         {json.dumps(schema)}
+                ### AVAILABLE DATASOURCE:
+                {json.dumps(schema)}
 
-        #         ### METADATA
-        #         {parsed_metadata.get("chart_type", "")}
+                ### METADATA
+                {parsed_metadata.get("chart_type", "")}
 
-        #         ### USER QUERY:
-        #         {request.query}
-        #         """
+                ### USER QUERY:
+                {request.query}
+                """
 
-        #     # logger.info(f"Prompt message for SQL generation: {prompt_message}")
-        #     logger.info(f"Generating SQL for PostgreSQL with prompt: {prompt_message}")
+            # logger.info(f"Prompt message for SQL generation: {prompt_message}")
+            logger.info(f"Generating SQL for PostgreSQL with prompt: {prompt_message}")
 
-        #     generated_sql = await ai_client.chat(
-        #         message=prompt_message,
-        #         app_id=1,
-        #         agent_id=10
-        #     )
-        #     logger.info(f"AI response for SQL generation: {generated_sql}")
+            generated_sql = await ai_client.chat(
+                message=prompt_message,
+                app_id=1,
+                agent_id=10
+            )
+            logger.info(f"AI response for SQL generation: {generated_sql}")
 
 
-        # elif database_type.lower() == "mongodb":
+        elif database_type.lower() == "mongodb":
 
-        #     prompt_message = f"""
-        #         Generate a MongoDB query for resolving the user query.
+            prompt_message = f"""
+                Generate a MongoDB query for resolving the user query.
                 
-        #         ### AVAILABLE DATASOURCE:
-        #         {json.dumps(schema)}
+                ### AVAILABLE DATASOURCE:
+                {json.dumps(schema)}
 
-        #         ### METADATA
-        #         {parsed_metadata.get("chart_type", "")}
+                ### METADATA
+                {parsed_metadata.get("chart_type", "")}
 
-        #         ### USER QUERY:
-        #         {request.query}
-        #         """
+                ### USER QUERY:
+                {request.query}
+                """
 
-        #     logger.info(f"Prompt message for MongoDB query generation: {prompt_message}")
+            logger.info(f"Prompt message for MongoDB query generation: {prompt_message}")
 
-        #     generated_sql = await ai_client.chat(
-        #         message=prompt_message,
-        #         app_id=1,
-        #         agent_id=5
-        #     )
+            generated_sql = await ai_client.chat(
+                message=prompt_message,
+                app_id=1,
+                agent_id=5
+            )
 
 
         if not generated_sql:
