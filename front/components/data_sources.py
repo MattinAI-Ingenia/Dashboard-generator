@@ -123,8 +123,6 @@ def manage_data_sources(user_id: int):
                 # Show default port based on database type
                 default_ports = {
                     "postgresql": 5432,
-                    "mysql": 3306,
-                    "sqlite": 0,
                     "mongodb": 27017
                 }
                 port = st.number_input("Port", value=default_ports.get(db_type, 5432), min_value=0, max_value=65535)

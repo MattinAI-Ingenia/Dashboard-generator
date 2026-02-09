@@ -47,7 +47,7 @@ async def execute_query(
         try:
             # Validate data source exists
             data_source = data_source_repository.get_by_name(db, name=request.data_source)
-            logging.info(f"EXISTE DATASOURCE: {data_source}")
+            logging.info(f"Data source exists: {data_source}")
 
             if not data_source:
                 raise HTTPException(
@@ -216,7 +216,7 @@ async def execute_query(
                 
                 try:
                     parsed_validation = json.loads(validation_response)
-                    suggested_fix = parsed_validation.get("suggested_fix")
+                    suggested_fix = parsed_validation.get("suggested_fix") or parsed_validation.get("correction_guidance")
                     
                     if not suggested_fix:
                         logger.error("Validator did not provide a suggested fix")
