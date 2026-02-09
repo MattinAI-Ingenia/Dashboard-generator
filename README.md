@@ -1,6 +1,6 @@
 # Dashboard Generator
 
-**MattinAI's AI-powered Dashboard Generator** - A full-stack application that enables users to create interactive dashboards with AI assistance. Users can connect to multiple data sources, query data using natural language, and visualize insights with an intelligent AI core integration.
+**MattinAI's AI-powered Dashboard Generator** - A full-stack application that enables users to create dashboards with AI assistance. Users can connect to multiple data sources, query data using natural language, and visualize insights with an intelligent AI core integration.
 
 ---
 
@@ -19,7 +19,7 @@
 
 ## Prerequisites
 
-Before you begin, ensure you have the following installed:
+Ensure you have the following installed:
 
 - **Python 3.10+**
 - **Docker & Docker Compose**
@@ -38,20 +38,15 @@ cd Dashboard-generator
 
 ### 2️.- Set Up Environment Variables
 
-Create a `.env` file in the project root with your configuration:
+Copy .env.example to an .env file and fill the fields. You only need to change the following ones: 
 
 ```env
-# Database Configuration
-DATABASE_URL=postgresql://dashboards_user:password@localhost:5433/dashboards
-
 # AI Core
 AI_CORE_URL=http://localhost:8000
 AI_CORE_API_KEY=your_api_key_here
 ```
 
-### 3️.- Start Sytem with Docker Compose
-
-#### Docker
+### 3️.- Start Sytem
 
 ```bash
 docker-compose up -d
@@ -71,7 +66,7 @@ docker exec -i test_postgres psql -U postgres -d demo < demo-big-en-20170815.sql
 #### Front
 ```bash
 cd front
- uv run streamlit run dashboard_demo.py 
+uv run streamlit run dashboard_demo.py 
 ```
 
 
