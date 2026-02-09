@@ -1,6 +1,16 @@
 // demo_data/mongo_init.js
 db = db.getSiblingDB('analytics_demo');
 
+// Create user for analytics_demo database
+db.createUser({
+    user: "demo_user",
+    pwd: "demo_pass",
+    roles: [
+        { role: "readWrite", db: "analytics_demo" },
+        { role: "dbAdmin", db: "analytics_demo" }
+    ]
+});
+
 // User profiles with nested structures
 db.user_profiles.insertMany([
     {
