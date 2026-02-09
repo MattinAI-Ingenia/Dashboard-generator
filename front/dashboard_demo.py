@@ -765,11 +765,20 @@ if st.session_state.show_chat:
                     ]
                 }
             
+            # Fetch data sources with schemas for context
+            data_sources_context = dash_api.get_data_sources_with_schemas(st.session_state.user_id)
+            
+            # Combine contexts
+            full_context = {
+                "dashboard": dashboard_context,
+                "data_sources": data_sources_context
+            }
+            
             response = dash_api.chat_with_agent(
                 prompt, 
                 conversation_id=st.session_state.conversation_id,  # Use stored ID or None for new conversation
                 user_id=st.session_state.user_id,
-                dashboard_context=dashboard_context  # Pass context
+                dashboard_context=full_context  # Pass full context with data sources
             )
 
             # Store the conversation_id returned by the API for follow-up messages

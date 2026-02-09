@@ -71,18 +71,35 @@ async def chat_with_agent(
     request: ChatRequest,
     ai_client: AICoreClient = Depends(get_ai_client)
 ) -> ChatResponse:
-    """Chat with agent with optional dashboard context"""
+    """Chat with agent with optional dashboard and data sources context"""
     message = request.query
+    context_info = ""
 
-    # Enrich message with dashboard context if provided
-    if request.context and request.context.get("dashboard_id"):
-        context_info = f"""
-### CONTEXTO ACTUAL
-Dashboard abierto: "{request.context['dashboard_name']}" (ID: {request.context['dashboard_id']})
+    # Handle new context structure: {dashboard: {...}, data_sources: [...]}
+    dashboard_context = None
+    data_sources_context = None
+    
+    if request.context:
+        # New structure with separate dashboard and data_sources
+        if "dashboard" in request.context:
+            dashboard_context = request.context["dashboard"]
+        # Legacy support: direct dashboard_id in context
+        elif "dashboard_id" in request.context:
+            dashboard_context = request.context
+            
+        if "data_sources" in request.context:
+            data_sources_context = request.context["data_sources"]
+
+    # Add dashboard context if available
+    if dashboard_context and dashboard_context.get("dashboard_id"):
+        context_info += f"""
+### DASHBOARD ACTUAL
+Dashboard abierto: "{dashboard_context['dashboard_name']}" (ID: {dashboard_context['dashboard_id']})
+Descripción: {dashboard_context.get('description', 'N/A')}
 
 Visualizaciones en el dashboard:
 """
-        for i, viz in enumerate(request.context['visualizations'], 1):
+        for i, viz in enumerate(dashboard_context['visualizations'], 1):
             context_info += f"""
 {i}. "{viz['title']}" (ID: {viz['id']})
    - Tipo: {viz['chart_type']}
@@ -91,7 +108,43 @@ Visualizaciones en el dashboard:
    - Ejes: X={viz['x_column']}, Y={viz['y_column']}
    - Historial de ediciones: {len(viz['edit_history'])} cambios
 """
+
+    # Add data sources context if available
+    if data_sources_context:
+        context_info += f"""
+
+### FUENTES DE DATOS DISPONIBLES
+"""
+        for ds in data_sources_context:
+            context_info += f"""
+📊 {ds['name']} (ID: {ds['id']})
+   - Tipo: {ds['type']}
+   - Descripción: {ds.get('description', 'N/A')}
+"""
+            # Add schema information
+            if ds.get('schema'):
+                schema = ds['schema']
+                # SQL databases
+                if schema.get('schemas'):
+                    for schema_info in schema['schemas']:
+                        context_info += f"\n   Schema: {schema_info['schema_name']}\n"
+                        if schema_info.get('tables'):
+                            context_info += "   Tablas:\n"
+                            for table in schema_info['tables'][:5]:  # Limit to first 5 tables
+                                cols = ', '.join([col['name'] for col in table['columns'][:10]])  # First 10 columns
+                                context_info += f"     - {table['name']}: {cols}\n"
+                
+                # MongoDB databases
+                if schema.get('databases'):
+                    for db_info in schema['databases']:
+                        context_info += f"\n   Database: {db_info['database_name']}\n"
+                        if db_info.get('collections'):
+                            context_info += "   Colecciones:\n"
+                            for collection in db_info['collections'][:5]:  # Limit to first 5 collections
+                                fields = ', '.join([field['name'] for field in collection['fields'][:10]])
+                                context_info += f"     - {collection['name']}: {fields}\n"
         
+    if context_info:
         message = f"{context_info}\n\n### CONSULTA DEL USUARIO\n{request.query}"
         
     metadata_response = await ai_client.chat(

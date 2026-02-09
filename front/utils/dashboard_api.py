@@ -42,7 +42,6 @@ class DashboardApi:
             "user_id": user_id,
             "context": dashboard_context
         }
-        print(f"Sending request to /chat/: {request_payload}")
         try:
             result = self.call_api("/chat/", method="POST", data=request_payload)
             return result if result else {}
@@ -351,3 +350,40 @@ class DashboardApi:
         except Exception as e:
             st.error(f"Failed to signup: {str(e)}")
             return {}
+    
+    # DATA SOURCES
+    def get_data_sources_with_schemas(self, user_id: int) -> List[Dict[str, Any]]:
+        """Get all data sources with their schemas for chat context"""
+        try:
+            # Get all active data sources
+            data_sources = self.call_api(f"/data-sources/?user_id={user_id}&status=active")
+            
+            if not data_sources:
+                return []
+            
+            # For each data source, fetch its schema
+            data_sources_with_schemas = []
+            for ds in data_sources:
+                try:
+                    schema = self.call_api(f"/data-sources/{ds['id']}/schema?refresh=false")
+                    data_sources_with_schemas.append({
+                        "id": ds['id'],
+                        "name": ds['name'],
+                        "type": ds['type'],
+                        "description": ds.get('description', ''),
+                        "schema": schema
+                    })
+                except Exception as e:
+                    # If schema fetch fails, include source without schema
+                    data_sources_with_schemas.append({
+                        "id": ds['id'],
+                        "name": ds['name'],
+                        "type": ds['type'],
+                        "description": ds.get('description', ''),
+                        "schema": None
+                    })
+            
+            return data_sources_with_schemas
+        except Exception as e:
+            st.error(f"Failed to fetch data sources: {str(e)}")
+            return []
