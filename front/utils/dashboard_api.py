@@ -300,7 +300,22 @@ class DashboardApi:
             return result
         except Exception as e:
             st.error(f"Failed to generate SQL from NLP: {str(e)}")
-            return {}    
+            return {}
+
+    def generate_query_add_visualization(self, nlp_query: str) -> Dict[str, Any]:
+        """Generate SQL/MongoDB query from natural language and add visualization via backend API"""
+        request_payload = {
+            "query": nlp_query
+        }
+        try:
+            result = self.call_api("/nlp/query_add_visualization", method="POST", data=request_payload)
+            print()
+            print(f"Query add visualization result: {result}")
+            print()
+            return result
+        except Exception as e:
+            st.error(f"Failed to generate query for visualization: {str(e)}")
+            return {}
 
     def edit_visualization(self, original_viz: Dict[str, Any], edit_instructions: str) -> Dict[str, Any]:
         """Edit visualization via backend"""

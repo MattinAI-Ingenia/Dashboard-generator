@@ -7,6 +7,7 @@ import logging
 import json
 import datetime
 import os
+import re
 from pathlib import Path
 
 from core.database import get_db
@@ -16,6 +17,69 @@ from repositories.data_source import data_source_repository
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
+
+
+def extract_column_aliases_from_sql(sql: str) -> tuple:
+    """
+    Extract column aliases from a SQL SELECT statement.
+    Returns (x_column, y_column) tuple.
+    Assumes first column is x (categorical) and second is y (numeric).
+    
+    Args:
+        sql: SQL query string
+        
+    Returns:
+        Tuple of (x_column_name, y_column_name) or (None, None) if extraction fails
+    """
+    try:
+        # Find the SELECT ... FROM part
+        select_match = re.search(r'SELECT\s+(.+?)\s+FROM', sql, re.IGNORECASE | re.DOTALL)
+        if not select_match:
+            return None, None
+        
+        select_clause = select_match.group(1)
+        
+        # Split by comma, handling nested parentheses
+        columns = []
+        current = ""
+        paren_depth = 0
+        for char in select_clause:
+            if char == '(':
+                paren_depth += 1
+                current += char
+            elif char == ')':
+                paren_depth -= 1
+                current += char
+            elif char == ',' and paren_depth == 0:
+                columns.append(current.strip())
+                current = ""
+            else:
+                current += char
+        if current.strip():
+            columns.append(current.strip())
+        
+        aliases = []
+        for col in columns[:2]:  # Only need first two columns
+            # Look for "AS alias" pattern (case insensitive)
+            as_match = re.search(r'\s+AS\s+(\w+)\s*$', col, re.IGNORECASE)
+            if as_match:
+                aliases.append(as_match.group(1).lower())
+            else:
+                # No alias, use the column name itself
+                # Handle table.column format
+                col_clean = col.strip().split('.')[-1].strip()
+                aliases.append(col_clean.lower())
+        
+        x_col = aliases[0] if len(aliases) > 0 else None
+        y_col = aliases[1] if len(aliases) > 1 else None
+        
+        logger.info(f"Extracted column aliases from SQL: x={x_col}, y={y_col}")
+        return x_col, y_col
+        
+    except Exception as e:
+        logger.warning(f"Failed to extract column aliases from SQL: {e}")
+        return None, None
+
 
 # Load prompts from external markdown files
 def load_prompts():
@@ -279,25 +343,254 @@ async def generate_sql_from_nlp(
         
         elif database_type.lower() == "postgresql":
             logger.info("ES POSTGRESQL")
+            # Get the SQL query
+            query_value = parsed_generated_sql.get("query", "")
+
+            if isinstance(query_value, dict):
+                sql_query = query_value.get("query_string", "")
+            else:
+                sql_query = query_value
+            
+            # Try to get column names from response, fallback to extracting from SQL
+            x_col = parsed_generated_sql.get("x_column")
+            y_col = parsed_generated_sql.get("y_column")
+            
+            # If not found, extract from SQL query
+            if not x_col or not y_col:
+                extracted_x, extracted_y = extract_column_aliases_from_sql(sql_query)
+                x_col = x_col or extracted_x
+                y_col = y_col or extracted_y
+            
             # Return successful result
             return NLPQueryResponse(
                 success=True,
                 result=SQLGenerationResult(
-                    sql=parsed_generated_sql.get("query", ""),
+                    sql=sql_query,
                     original_user_query=request.query,
                     title=parsed_metadata.get("title", ""),
                     description=parsed_metadata.get("description", ""),
                     data_source=database_name,
-                    # data_source= parsed_generated_sql.get("database_name"),
                     chart_type=parsed_metadata.get("chart_type"),
                     query_config={
-                        "x_column": parsed_generated_sql.get("x_column"), 
-                        "y_column": parsed_generated_sql.get("y_column")
+                        "x_column": x_col, 
+                        "y_column": y_col
                     }, 
                     config= parsed_metadata.get("config")
                 )
             )
     
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error in NLP query processing: {str(e)}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error processing NLP query: {str(e)}"
+        )
+
+
+@router.post("/query_add_visualization", response_model=NLPQueryResponse)
+async def generate_query_add_visualization(
+    request: NLPQueryRequest,
+    db: Session = Depends(get_db),
+    ai_client: AICoreClient = Depends(get_ai_client)
+):
+    """
+    Generate SQL from natural language query using AI service:
+    1. Select appropriate datasource
+    2. Generate SQL
+    3. Validate 
+    """
+    try:
+        # Step 1: Get all available datasources
+        datasources = data_source_repository.get_all(db)
+        logger.info(f"Found {len(datasources)} datasources in the system.")
+        if not datasources:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="No datasources configured"
+            )
+
+        # Step 2: Extract metadata
+        prompt_message = get_prompt("metadata_extraction", user_query=request.query)
+        logger.info(f"Extracting metadata for query: {request.query}")
+        logger.info(f"Prompt message for metadata extraction: {prompt_message}")
+        metadata_response = await ai_client.chat(
+            message=prompt_message,
+            user_id=None,
+            conversation_id=None,
+            agent_id=3, 
+            app_id=1    
+        )
+        metadata_response = metadata_response.get("response", "{}")
+ 
+        try:
+            parsed_metadata = json.loads(metadata_response)
+        except json.JSONDecodeError:
+            raise ValueError("AI response is not valid JSON")
+       
+        logger.info(f"Metadata extraction response: {parsed_metadata} \n")
+
+        # Step 2: Select appropriate datasource
+        datasources_info = [
+            {"name": ds.name, "schema": ds.schema_data} for ds in datasources
+        ]
+        logger.info(f"Datasource info response: {datasources_info} \n")
+
+        prompt_message = get_prompt("datasource_selection", datasources_info=json.dumps(datasources_info), user_query=request.query)
+
+        logger.info(f"Selecting datasource for query: {request.query}")
+        logger.info(f"Prompt message for datasource selection: {prompt_message}")
+        
+        # Configure agent_id - use 7 for new format, other values for legacy format
+        current_agent_id = 12
+        generated_sql = await ai_client.chat(
+            message=prompt_message,
+            conversation_id=None,
+            user_id=None,
+            agent_id=current_agent_id, 
+            app_id=1    
+        )
+        logger.info('--- Selected datasource response ---')
+        logger.info(f"Datasource selection response: {selected_datasource} \n")
+        selected_datasource = selected_datasource.get("response", "{}")
+        logger.info(f"selected_datasource: {selected_datasource} \n")
+
+        try:
+            parsed_selected_datasource = json.loads(selected_datasource)
+        except json.JSONDecodeError:
+            raise ValueError("AI response is not valid JSON")
+
+        if not generated_sql:
+            return NLPQueryResponse(
+                success=False,
+                error="AI service returned empty SQL",
+                suggestions=["Try rephrasing your query", "Be more specific about what data you need"]
+            )
+        
+        generated_sql = generated_sql.get("response", "{}")
+        # logger.info(f"Generated SQL/MongoDB query: {generated_sql} \n")
+        try:
+            parsed_generated_sql = json.loads(generated_sql)
+        except json.JSONDecodeError:
+            raise ValueError("AI response is not valid JSON")
+
+        logger.info(f"Parsed generated SQL response generate_query_add_visualization: {parsed_generated_sql} ")
+        
+        # Parse response based on agent_id used
+        if current_agent_id == 7:
+            # Agent 7 uses new format with data_source object and visualization_metadata
+            # Format: { "data_source": { "name": "...", "type": "..." }, "visualization_metadata": {...} }
+            data_source_info = parsed_generated_sql.get("data_source", {})
+            
+            if data_source_info:
+                database_name = data_source_info.get("name", "")
+                raw_type = data_source_info.get("type", "").lower()
+                # Normalize type: "sql (postgresql)" -> "postgresql", "mongodb" -> "mongodb"
+                if "postgresql" in raw_type or "postgres" in raw_type:
+                    database_type = "postgresql"
+                elif "mongo" in raw_type:
+                    database_type = "mongodb"
+                else:
+                    database_type = raw_type
+            else:
+                # Fallback if data_source not present
+                database_type = parsed_generated_sql.get("database_type", "").lower()
+                database_name = parsed_generated_sql.get("database_name", "")
+            
+            # Extract visualization metadata
+            viz_metadata = parsed_generated_sql.get("visualization_metadata", {})
+        else:
+            # Legacy format: { "database_type": "...", "database_name": "..." }
+            database_type = parsed_generated_sql.get("database_type", "").lower()
+            database_name = parsed_generated_sql.get("database_name", "")
+            viz_metadata = {}  # No viz_metadata in legacy format
+        
+        # Fallback: if AI didn't return database_type, get it from repository
+        if not database_type and database_name:
+            datasource_details = data_source_repository.get_by_name(db, name=database_name)
+            if datasource_details:
+                database_type = datasource_details.type.lower()
+                logger.info(f"Retrieved database type from repository: {database_type}")
+        
+        if not database_type:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Could not determine database type from AI response"
+            )
+     
+        if database_type == "mongodb":
+            # Return MongoDB result
+            # Use visualization_metadata if available, fallback to parsed_metadata
+            viz_config = viz_metadata.get("config", {})
+            return NLPQueryResponse(
+                success=True,
+                result=MongodbGenerationResult(
+                    mongodb_query=json.dumps({
+                        "collection": parsed_generated_sql.get("collection"),
+                        "operation": "aggregate",
+                        "pipeline": parsed_generated_sql.get("pipeline", [])
+                    }),
+                    original_user_query=request.query,
+                    title=viz_metadata.get("title") or parsed_metadata.get("title", ""),
+                    description=viz_metadata.get("description") or parsed_metadata.get("description", ""),
+                    data_source=database_name,
+                    chart_type=viz_metadata.get("chart_type") or parsed_metadata.get("chart_type"),
+                    config=viz_config or parsed_metadata.get("config"),
+                    query_config={
+                        # Prioritize actual column names from query response over display labels from viz_config
+                        "x_column": parsed_generated_sql.get("x_column") or viz_config.get("x_column"), 
+                        "y_column": parsed_generated_sql.get("y_column") or viz_config.get("y_column")
+                    }
+                )
+            )
+        
+        elif database_type == "postgresql":
+            logger.info("ES POSTGRESQL")
+            # Return successful result
+            # Use visualization_metadata if available, fallback to parsed_metadata
+            viz_config = viz_metadata.get("config", {})
+            
+            # Get the SQL query
+            sql_query = parsed_generated_sql.get("query", "")
+            
+            # Try to get column names from response, fallback to extracting from SQL
+            x_col = parsed_generated_sql.get("x_column")
+            y_col = parsed_generated_sql.get("y_column")
+            
+            # If not found at root, extract from SQL query
+            if not x_col or not y_col:
+                extracted_x, extracted_y = extract_column_aliases_from_sql(sql_query)
+                x_col = x_col or extracted_x
+                y_col = y_col or extracted_y
+            
+            # Final fallback to viz_config (display labels - not ideal but better than nothing)
+            x_col = x_col or viz_config.get("x_column")
+            y_col = y_col or viz_config.get("y_column")
+            
+            return NLPQueryResponse(
+                success=True,
+                result=SQLGenerationResult(
+                    sql=sql_query,
+                    original_user_query=request.query,
+                    title=viz_metadata.get("title") or parsed_metadata.get("title", ""),
+                    description=viz_metadata.get("description") or parsed_metadata.get("description", ""),
+                    data_source=database_name,
+                    chart_type=viz_metadata.get("chart_type") or parsed_metadata.get("chart_type"),
+                    query_config={
+                        "x_column": x_col, 
+                        "y_column": y_col
+                    }, 
+                    config=viz_config or parsed_metadata.get("config")
+                )
+            )
+        
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Unsupported database type: {database_type}"
+            )
+
     except HTTPException:
         raise
     except Exception as e:

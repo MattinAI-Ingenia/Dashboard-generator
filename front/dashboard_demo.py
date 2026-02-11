@@ -481,6 +481,9 @@ def execute_visualization_query(viz_config: Dict[str, Any]) -> Dict[str, Any]:
         print(f"Executing viz query, {result}")
         print()
         if "mongodb_query" in result:
+            print("Enra en que es una consulta MONGODB")
+            print()
+            
             # MongoDB query - construct proper query format
             query_result = dash_api.execute_query(
                 data_source=result["data_source"],
@@ -877,7 +880,7 @@ if st.session_state.current_page == "generate":
                         progress.progress(i + 1)
                     
                     # Generate fake visualization config
-                    viz_config = dash_api.generate_sql_from_nlp(query)
+                    viz_config = dash_api.generate_query_add_visualization(query)
                     print()
                     print(f"viz_config generated: {viz_config}")
                     print()

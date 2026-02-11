@@ -216,7 +216,22 @@ async def execute_query(
                 
                 try:
                     parsed_validation = json.loads(validation_response)
-                    suggested_fix = parsed_validation.get("suggested_fix") or parsed_validation.get("correction_guidance")
+                    
+                    # Handle multiple response formats from validator:
+                    # Format 1: {"suggested_fix": "..."}
+                    # Format 2: {"query": {"query": "...", "x_column": "...", "y_column": "..."}}
+                    # Format 3: {"query": "..."}
+                    suggested_fix = parsed_validation.get("suggested_fix")
+                    
+                    if not suggested_fix:
+                        # Try alternative formats
+                        query_obj = parsed_validation.get("query")
+                        if isinstance(query_obj, dict):
+                            # Nested format: {"query": {"query": "..."}}
+                            suggested_fix = query_obj.get("query")
+                        elif isinstance(query_obj, str):
+                            # Direct format: {"query": "..."}
+                            suggested_fix = query_obj
                     
                     if not suggested_fix:
                         logger.error("Validator did not provide a suggested fix")
@@ -300,7 +315,12 @@ async def execute_query(
                     parsed_regenerated = json.loads(regenerated_response)
                     
                     if database_type.lower() == "postgresql":
-                        new_query = parsed_regenerated.get("query", "")
+                        # Handle nested format: {"query": {"query": "...", "x_column": "..."}}
+                        query_obj = parsed_regenerated.get("query", "")
+                        if isinstance(query_obj, dict):
+                            new_query = query_obj.get("query", "")
+                        else:
+                            new_query = query_obj
                     elif database_type.lower() == "mongodb":
                         new_query = json.dumps({
                             "collection": parsed_regenerated.get("collection"),
